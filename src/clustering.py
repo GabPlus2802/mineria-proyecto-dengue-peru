@@ -64,6 +64,9 @@ def evaluar_k(X_scaled: np.ndarray, k_min=None, k_max=None) -> pd.DataFrame:
     """Inercia (codo) y silueta para cada k en el rango configurado."""
     k_min = k_min or config.K_MIN
     k_max = k_max or config.K_MAX
+    # La silueta requiere 2 <= k <= n_muestras-1
+    k_max = min(k_max, len(X_scaled) - 1)
+    k_min = min(k_min, k_max)
     filas = []
     for k in range(k_min, k_max + 1):
         km = KMeans(n_clusters=k, random_state=config.RANDOM_STATE, n_init=10)

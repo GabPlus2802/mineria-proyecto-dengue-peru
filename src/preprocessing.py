@@ -68,7 +68,7 @@ def load_raw(path=None) -> pd.DataFrame:
 
 def _edad_a_anios(edad: pd.Series, tipo: pd.Series) -> pd.Series:
     """Convierte edad a anios usando tipo_edad (A=anios, M=meses, D=dias)."""
-    edad_num = pd.to_numeric(edad, errors="coerce")
+    edad_num = pd.to_numeric(edad, errors="coerce").astype(float)
     tipo = tipo.astype(str).str.upper().str.strip()
     anios = edad_num.copy()
     anios = anios.mask(tipo == "M", edad_num / 12.0)
