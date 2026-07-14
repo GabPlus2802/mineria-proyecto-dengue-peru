@@ -202,8 +202,8 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| Random Forest | 0.735 | 0.678 | 0.917 | 0.779 | 0.879 |
-| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
+| XGBoost (mejor por F1) | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
 
 **Pronóstico nacional:** Holt-Winters MAPE **31.7 %** / RMSE 417 vs media móvil
 44.9 % / 459. **Clustering:** k = 3, silueta ≈ 0.35.

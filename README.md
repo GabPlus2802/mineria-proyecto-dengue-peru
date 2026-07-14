@@ -181,8 +181,8 @@ streamlit run app.py
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| Random Forest | 0.735 | 0.678 | 0.917 | 0.779 | 0.879 |
-| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
+| XGBoost (mejor por F1) | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
 
 **Pronóstico** (serie nacional):
 
