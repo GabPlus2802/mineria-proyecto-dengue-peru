@@ -1,0 +1,30 @@
+# === Secretos ===
+.streamlit/secrets.toml
+.env
+
+# === Entorno virtual ===
+.venv/
+venv/
+env/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# === Datos crudos (dataset original demasiado grande para GitHub) ===
+data/raw/*
+!data/raw/.gitkeep
+
+# === Base de datos local temporal del CRUD ===
+data/consultas_local.db
+*.sqlite
+*.sqlite3
+
+# === SO / editor ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
