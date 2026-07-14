@@ -49,7 +49,8 @@ K_SELECTED = 3  # se puede sobrescribir con la seleccion automatica por silueta
 # Clasificacion
 # ---------------------------------------------------------------------------
 RF_N_ESTIMATORS = 200
-RF_MAX_DEPTH = None
+RF_MAX_DEPTH = 16          # acotado: evita un modelo de cientos de MB y limita overfitting
+RF_MIN_SAMPLES_LEAF = 20   # hojas con >=20 muestras -> arbol mas compacto y estable
 
 XGB_N_ESTIMATORS = 200
 XGB_LEARNING_RATE = 0.10
