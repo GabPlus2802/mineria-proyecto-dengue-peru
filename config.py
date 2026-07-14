@@ -23,6 +23,7 @@ RAW_ENCODING = "utf-8-sig"
 DENGUE_SEMANAL = DATA_PROCESSED / "dengue_semanal.csv"
 DISTRITOS_CLUSTERS = DATA_PROCESSED / "distritos_clusters.csv"
 METRICAS_CLASIFICACION = DATA_PROCESSED / "metricas_clasificacion.csv"
+METRICAS_BALANCEO = DATA_PROCESSED / "metricas_balanceo.csv"
 METRICAS_PRONOSTICO = DATA_PROCESSED / "metricas_pronostico.csv"
 
 # Modelos

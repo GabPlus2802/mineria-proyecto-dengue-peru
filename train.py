@@ -75,6 +75,13 @@ def entrenar_clasificacion(df: pd.DataFrame):
     tabla_out.insert(1, "particion", "test")
     tabla_out.to_csv(config.METRICAS_CLASIFICACION, index=False, encoding="utf-8")
 
+    # Efecto del balanceo en el recall de la clase minoritaria (desbalance > 80/20)
+    if info["balanceo_aplicado"]:
+        bal = modeling.comparar_balanceo(data)
+        bal.to_csv(config.METRICAS_BALANCEO, index=False, encoding="utf-8")
+        print("\n   Efecto del balanceo (recall de la clase 1 en test):")
+        print(bal.to_string(index=False))
+
     # Guardar modelos y preprocesador (ajustado con train)
     prep = modeling.build_preprocessor().fit(data["X_train"])
     joblib.dump(prep, config.PATH_PREPROCESSOR, compress=3)

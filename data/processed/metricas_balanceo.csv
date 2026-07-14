@@ -1,0 +1,5 @@
+modelo,estado,recall_clase_1,f1_clase_1
+random_forest,sin balanceo,0.6236,0.7421
+random_forest,con balanceo,0.9208,0.7749
+xgboost,sin balanceo,0.638,0.7512
+xgboost,con balanceo,0.912,0.779

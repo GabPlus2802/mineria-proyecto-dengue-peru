@@ -58,6 +58,26 @@ with col2:
     st.plotly_chart(viz.curva_umbral(sweep), width='stretch')
     st.caption("Efecto del umbral en precision, recall y F1.")
 
+# Metricas POR CLASE del mejor modelo
+st.markdown(f"**Metricas por clase — {mejor}** (accuracy global: "
+            f"{tabla.loc[mejor, 'accuracy']:.3f})")
+st.dataframe(modeling.per_class_metrics(pipelines[mejor], data["X_test"],
+             data["y_test"], threshold=umbral), width='stretch')
+st.caption("Clase 1 = alta incidencia la semana siguiente (clase minoritaria en entrenamiento). "
+           "¿Que error es mas costoso? Un falso negativo (no anticipar alta incidencia) "
+           "suele ser mas grave en salud publica, por lo que se prioriza el recall de la clase 1.")
+
+# Efecto del balanceo de clases (desbalance > 80/20)
+bal = loaders.load_metricas_balanceo()
+if bal is not None:
+    ui.section("Efecto del balanceo de clases",
+               "El entrenamiento tiene desbalance ~90/10. Se aplica class_weight (RF) y "
+               "scale_pos_weight (XGBoost); aqui el efecto en el recall de la clase minoritaria.")
+    piv = bal.pivot(index="modelo", columns="estado", values="recall_clase_1")
+    piv["mejora"] = (piv["con balanceo"] - piv["sin balanceo"]).round(4)
+    st.dataframe(piv, width='stretch')
+    st.caption("recall de la clase 1 (alta incidencia) en el conjunto de prueba, sin y con balanceo.")
+
 # ---------------------------------------------------------------------------
 # SHAP
 # ---------------------------------------------------------------------------

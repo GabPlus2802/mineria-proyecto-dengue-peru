@@ -153,6 +153,57 @@ def metrics_table(models: dict, X, y, threshold=None) -> pd.DataFrame:
     return df.round(4)
 
 
+def per_class_metrics(model: Pipeline, X, y, threshold=None) -> pd.DataFrame:
+    """Precision, recall, F1 y soporte POR CLASE (0 = baja, 1 = alta incidencia)."""
+    from sklearn.metrics import classification_report
+
+    threshold = threshold if threshold is not None else config.CLASSIFICATION_THRESHOLD
+    proba = model.predict_proba(X)[:, 1]
+    pred = (proba >= threshold).astype(int)
+    rep = classification_report(y, pred, labels=[0, 1],
+                                target_names=["Clase 0 (baja)", "Clase 1 (alta)"],
+                                output_dict=True, zero_division=0)
+    filas = {}
+    for clase in ["Clase 0 (baja)", "Clase 1 (alta)"]:
+        filas[clase] = {
+            "precision": rep[clase]["precision"],
+            "recall": rep[clase]["recall"],
+            "f1-score": rep[clase]["f1-score"],
+            "soporte": int(rep[clase]["support"]),
+        }
+    df = pd.DataFrame(filas).T
+    df["soporte"] = df["soporte"].astype(int)
+    return df.round(4)
+
+
+def comparar_balanceo(data: dict, threshold=None) -> pd.DataFrame:
+    """Efecto del balanceo de clases en el recall de la clase minoritaria (clase 1).
+
+    Entrena cada modelo SIN balanceo y CON balanceo, y reporta recall y F1 de la
+    clase 1 sobre el conjunto de prueba. Cumple el requisito de la rubrica de
+    mostrar el efecto del balanceo cuando hay desbalance > 80/20.
+    """
+    threshold = threshold if threshold is not None else config.CLASSIFICATION_THRESHOLD
+    y_train = data["y_train"]
+    n_neg, n_pos = int((y_train == 0).sum()), max(int((y_train == 1).sum()), 1)
+    spw = n_neg / n_pos
+
+    variantes = {
+        ("random_forest", "sin balanceo"): build_random_forest(balanced=False),
+        ("random_forest", "con balanceo"): build_random_forest(balanced=True),
+        ("xgboost", "sin balanceo"): build_xgboost(scale_pos_weight=1.0),
+        ("xgboost", "con balanceo"): build_xgboost(scale_pos_weight=spw),
+    }
+    filas = []
+    for (modelo, estado), pipe in variantes.items():
+        pipe.fit(data["X_train"], y_train)
+        m = evaluate(pipe, data["X_test"], data["y_test"], threshold)
+        filas.append({"modelo": modelo, "estado": estado,
+                      "recall_clase_1": round(m["recall"], 4),
+                      "f1_clase_1": round(m["f1"], 4)})
+    return pd.DataFrame(filas)
+
+
 def threshold_sweep(model: Pipeline, X, y, umbrales=None) -> pd.DataFrame:
     """Efecto del umbral de decision sobre precision/recall/F1 y FP/FN."""
     if umbrales is None:

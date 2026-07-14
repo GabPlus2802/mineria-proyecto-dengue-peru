@@ -31,6 +31,11 @@ def load_metricas_clasificacion() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def load_metricas_balanceo() -> pd.DataFrame | None:
+    return pd.read_csv(config.METRICAS_BALANCEO) if config.METRICAS_BALANCEO.exists() else None
+
+
+@st.cache_data(show_spinner=False)
 def load_metricas_pronostico() -> pd.DataFrame:
     return pd.read_csv(config.METRICAS_PRONOSTICO)
 
