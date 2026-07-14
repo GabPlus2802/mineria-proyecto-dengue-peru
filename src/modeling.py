@@ -196,3 +196,39 @@ def shap_explainer(pipeline: Pipeline):
     import shap
 
     return shap.TreeExplainer(pipeline.named_steps["clf"])
+
+
+# ---------------------------------------------------------------------------
+# Construccion de features para una prediccion desde el navegador (Panel 2)
+# ---------------------------------------------------------------------------
+def construir_fila_prediccion(hist: pd.DataFrame, casos_actual: float, semana: int,
+                              departamento: str) -> pd.DataFrame:
+    """Arma la fila de features para predecir a partir del historial del distrito.
+
+    hist: filas del distrito ordenadas cronologicamente (columna 'casos').
+    casos_actual: casos observados en la semana desde la que se predice.
+    Las variables derivadas se calculan automaticamente (no se piden al usuario).
+    """
+    casos_prev = hist["casos"].tail(8).tolist()
+
+    def ultimo(n):
+        return float(casos_prev[-n]) if len(casos_prev) >= n else 0.0
+
+    ult4 = casos_prev[-4:] if len(casos_prev) >= 1 else [0.0]
+    ult8 = casos_prev[-8:] if len(casos_prev) >= 1 else [0.0]
+    lag1 = ultimo(1)
+
+    fila = {
+        "casos": float(casos_actual),
+        "casos_lag_1": lag1,
+        "casos_lag_2": ultimo(2),
+        "casos_lag_4": ultimo(4),
+        "promedio_movil_4": float(np.mean(ult4)),
+        "promedio_movil_8": float(np.mean(ult8)),
+        "desviacion_movil_4": float(np.std(ult4, ddof=1)) if len(ult4) > 1 else 0.0,
+        "crecimiento_semanal": (float(casos_actual) - lag1) / (lag1 + 1.0),
+        "semana_sen": float(np.sin(2 * np.pi * semana / 52.0)),
+        "semana_cos": float(np.cos(2 * np.pi * semana / 52.0)),
+        "departamento": departamento,
+    }
+    return pd.DataFrame([fila])[FEATURE_NUMERIC + FEATURE_CATEGORICAL]
