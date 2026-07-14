@@ -6,15 +6,16 @@ import pandas as pd
 import streamlit as st
 
 import config
-from src import loaders, modeling, visualizations as viz
-from src.preprocessing import FEATURE_CATEGORICAL, FEATURE_NUMERIC
+from src import loaders, modeling, ui, visualizations as viz
 
-st.set_page_config(page_title="Modelo Predictivo", page_icon="🤖", layout="wide")
-st.title("🤖 Panel 2 — Modelo Predictivo y Explicabilidad")
+ui.setup_page("Modelo Predictivo", "🤖")
 
 if not loaders.artefactos_listos():
     st.error("Faltan artefactos. Ejecuta `python train.py --rebuild`.")
     st.stop()
+
+ui.hero("🤖 Panel 2 — Modelo Predictivo y Explicabilidad",
+        "Random Forest vs XGBoost, umbral de decision, SHAP y prediccion en vivo.")
 
 df = loaders.load_master()
 modelos = loaders.load_models()
@@ -31,7 +32,7 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # Comparacion de modelos
 # ---------------------------------------------------------------------------
-st.subheader("Comparacion de modelos (test 2024)")
+ui.section("Comparacion de modelos (test 2024)")
 umbral = st.slider("Umbral de decision", 0.1, 0.9,
                    float(meta.get("threshold", config.CLASSIFICATION_THRESHOLD)), 0.05)
 
@@ -60,7 +61,8 @@ with col2:
 # ---------------------------------------------------------------------------
 # SHAP
 # ---------------------------------------------------------------------------
-st.subheader("Explicabilidad con SHAP")
+ui.section("Explicabilidad con SHAP",
+           "Que variables influyen en la probabilidad predicha (asociacion, no causalidad).")
 modelo_shap = mejor if mejor in ("random_forest", "xgboost") else "random_forest"
 
 
@@ -109,9 +111,9 @@ with tabl:
 # ---------------------------------------------------------------------------
 # Formulario de prediccion en vivo
 # ---------------------------------------------------------------------------
-st.subheader("Prediccion en vivo")
-st.markdown("Selecciona un distrito; las variables derivadas (lags, medias moviles, "
-            "estacionalidad) se calculan automaticamente desde su historial.")
+ui.section("Prediccion en vivo",
+           "Selecciona un distrito; las variables derivadas (lags, medias moviles, "
+           "estacionalidad) se calculan automaticamente desde su historial.")
 
 with st.form("form_prediccion"):
     c = st.columns(4)
@@ -138,10 +140,12 @@ if enviar:
         pipe = pipelines[modelo_pred]
         proba = float(pipe.predict_proba(fila)[0, 1])
         pred = int(proba >= umbral)
-        cc = st.columns(3)
-        cc[0].metric("Prediccion", "ALTA incidencia" if pred else "Baja incidencia")
-        cc[1].metric("Probabilidad", f"{proba:.1%}")
-        cc[2].metric("Modelo", modelo_pred)
+        ui.kpi_row([
+            {"label": "Prediccion", "value": "ALTA incidencia" if pred else "Baja incidencia",
+             "icon": "🚨" if pred else "✅", "accent": "#e34948" if pred else "#008300"},
+            {"label": "Probabilidad", "value": f"{proba:.1%}", "icon": "🎯", "accent": "#2a78d6"},
+            {"label": "Modelo", "value": modelo_pred, "icon": "🤖", "accent": "#4a3aa7"},
+        ])
 
         # Explicacion local de esta prediccion
         import shap

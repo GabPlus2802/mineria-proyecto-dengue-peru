@@ -6,14 +6,16 @@ import plotly.express as px
 import streamlit as st
 
 import config
-from src import clustering, loaders, visualizations as viz
+from src import clustering, loaders, ui, visualizations as viz
 
-st.set_page_config(page_title="EDA y Clustering", page_icon="📊", layout="wide")
-st.title("📊 Panel 1 — EDA y Clustering")
+ui.setup_page("EDA y Clustering", "📊")
 
 if not loaders.artefactos_listos():
     st.error("Faltan artefactos. Ejecuta `python train.py --rebuild`.")
     st.stop()
+
+ui.hero("📊 Panel 1 — EDA y Clustering",
+        "Exploracion de los datos, deteccion de outliers y agrupamiento de distritos.")
 
 df = loaders.load_master()
 clusters = loaders.load_clusters()
@@ -35,18 +37,21 @@ if dep_sel != "(Todos)":
 # ---------------------------------------------------------------------------
 # Resumen
 # ---------------------------------------------------------------------------
-st.subheader("Resumen")
-c = st.columns(5)
-c[0].metric("Registros (distrito-semana)", f"{len(f):,}")
-c[1].metric("Total de casos", f"{int(f['casos'].sum()):,}")
-c[2].metric("Departamentos", f["departamento"].nunique())
-c[3].metric("Distritos", f["ubigeo"].nunique())
-c[4].metric("Periodo", f"{rango[0]}–{rango[1]}")
+ui.section("Resumen", "Indicadores segun los filtros seleccionados.")
+ui.kpi_row([
+    {"label": "Registros", "value": f"{len(f):,}", "icon": "📅", "accent": "#2a78d6"},
+    {"label": "Total de casos", "value": f"{int(f['casos'].sum()):,}", "icon": "🦟",
+     "accent": "#e34948"},
+    {"label": "Departamentos", "value": f["departamento"].nunique(), "icon": "🗺️",
+     "accent": "#eda100"},
+    {"label": "Distritos", "value": f["ubigeo"].nunique(), "icon": "📍", "accent": "#1baf7a"},
+    {"label": "Periodo", "value": f"{rango[0]}–{rango[1]}", "icon": "⏱️", "accent": "#4a3aa7"},
+])
 
 # ---------------------------------------------------------------------------
 # EDA
 # ---------------------------------------------------------------------------
-st.subheader("Analisis exploratorio")
+ui.section("Analisis exploratorio")
 tab1, tab2, tab3, tab4 = st.tabs(
     ["Evolucion temporal", "Distribucion", "Por ubicacion", "Correlacion"]
 )
@@ -90,18 +95,20 @@ with tab4:
 # ---------------------------------------------------------------------------
 # Outliers (1.5 x IQR)
 # ---------------------------------------------------------------------------
-st.subheader("Outliers (regla 1.5 × IQR)")
+ui.section("Outliers (regla 1.5 × IQR)")
 casos_pos = f.loc[f["casos"] > 0, "casos"]
 if len(casos_pos) > 0:
     q1, q3 = casos_pos.quantile(0.25), casos_pos.quantile(0.75)
     iqr = q3 - q1
     lim_inf, lim_sup = q1 - 1.5 * iqr, q3 + 1.5 * iqr
     outliers = f[(f["casos"] > lim_sup)]
-    cc = st.columns(4)
-    cc[0].metric("Limite superior", f"{lim_sup:.1f}")
-    cc[1].metric("Semanas outlier", f"{len(outliers):,}")
-    cc[2].metric("% del total", f"{100*len(outliers)/max(len(f),1):.2f}%")
-    cc[3].metric("Caso maximo", f"{int(f['casos'].max()):,}")
+    ui.kpi_row([
+        {"label": "Limite superior", "value": f"{lim_sup:.1f}", "icon": "📏", "accent": "#2a78d6"},
+        {"label": "Semanas outlier", "value": f"{len(outliers):,}", "icon": "⚠️", "accent": "#eb6834"},
+        {"label": "% del total", "value": f"{100*len(outliers)/max(len(f),1):.2f}%",
+         "icon": "％", "accent": "#eda100"},
+        {"label": "Caso maximo", "value": f"{int(f['casos'].max()):,}", "icon": "🔺", "accent": "#e34948"},
+    ])
     st.info(
         "Los valores altos corresponden a semanas epidemicas reales; **no se eliminan** "
         "automaticamente. Se conservan porque representan brotes validos y son justamente "
@@ -117,11 +124,9 @@ if len(casos_pos) > 0:
 # ---------------------------------------------------------------------------
 # Clustering
 # ---------------------------------------------------------------------------
-st.subheader("Clustering de distritos (K-means)")
-st.markdown(
-    "Cada distrito se resume en un perfil numerico (promedio, maximo, variabilidad, "
-    "frecuencia de semanas con casos, semana tipica del pico, etc.) y se agrupa con K-means."
-)
+ui.section("Clustering de distritos (K-means)",
+           "Cada distrito se resume en un perfil numerico (promedio, maximo, variabilidad, "
+           "frecuencia de semanas con casos, semana tipica del pico) y se agrupa con K-means.")
 
 # Recalcular evaluacion de k para mostrar codo y silueta (rapido sobre 571 distritos)
 perfil = clustering.district_profile(df)

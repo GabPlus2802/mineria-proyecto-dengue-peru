@@ -10,12 +10,51 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
-PLANTILLA = "plotly_white"
+# ---------------------------------------------------------------------------
+# Paleta y plantilla profesional (colores accesibles, validados para daltonismo)
+# ---------------------------------------------------------------------------
+# Categorica en orden fijo (identidad); no se cicla ni se reordena.
+PALETTE = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7",
+           "#e34948", "#e87ba4", "#eb6834"]
+AZUL = "#2a78d6"          # hue secuencial por defecto (magnitud)
+AZUL_SEQ = ["#cde2fb", "#9ec5f4", "#5598e7", "#2a78d6", "#184f95"]  # rampa clara->oscura
+TINTA = "#0b0b0b"
+TINTA_2 = "#52514e"
+GRID = "#e1e0d9"
+EJE = "#c3c2b7"
+
+_TEMPLATE = go.layout.Template(
+    layout=dict(
+        colorway=PALETTE,
+        font=dict(family='system-ui, -apple-system, "Segoe UI", sans-serif',
+                  color=TINTA, size=13),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        title=dict(font=dict(size=16, color=TINTA), x=0.01, xanchor="left"),
+        margin=dict(l=48, r=24, t=52, b=44),
+        xaxis=dict(gridcolor=GRID, linecolor=EJE, zeroline=False,
+                   tickfont=dict(color=TINTA_2), title=dict(font=dict(color=TINTA_2))),
+        yaxis=dict(gridcolor=GRID, linecolor=EJE, zeroline=False,
+                   tickfont=dict(color=TINTA_2), title=dict(font=dict(color=TINTA_2))),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
+        colorscale=dict(sequential=[[i / (len(AZUL_SEQ) - 1), c] for i, c in enumerate(AZUL_SEQ)]),
+        hoverlabel=dict(font=dict(family='system-ui, sans-serif', size=12)),
+    )
+)
+pio.templates["dengue"] = _TEMPLATE
+PLANTILLA = "dengue"
+
+
+def use_theme():
+    """Fija la plantilla como predeterminada de Plotly (idempotente)."""
+    pio.templates.default = "dengue"
 
 
 def histograma(df: pd.DataFrame, col: str, titulo: str | None = None) -> go.Figure:
     fig = px.histogram(df, x=col, nbins=50, template=PLANTILLA,
+                       color_discrete_sequence=[AZUL],
                        title=titulo or f"Distribucion de {col}")
     fig.update_layout(bargap=0.05)
     return fig
@@ -23,6 +62,7 @@ def histograma(df: pd.DataFrame, col: str, titulo: str | None = None) -> go.Figu
 
 def boxplot(df: pd.DataFrame, col: str, titulo: str | None = None) -> go.Figure:
     return px.box(df, y=col, points="outliers", template=PLANTILLA,
+                  color_discrete_sequence=[AZUL],
                   title=titulo or f"Boxplot de {col}")
 
 
@@ -34,7 +74,9 @@ def matriz_correlacion(df: pd.DataFrame, cols: list[str]) -> go.Figure:
 
 
 def evolucion_temporal(serie: pd.Series, titulo="Evolucion temporal de casos") -> go.Figure:
-    fig = px.line(x=serie.index, y=serie.values, template=PLANTILLA, title=titulo)
+    fig = px.line(x=serie.index, y=serie.values, template=PLANTILLA, title=titulo,
+                  color_discrete_sequence=[AZUL])
+    fig.update_traces(line=dict(width=2))
     fig.update_layout(xaxis_title="Fecha", yaxis_title="Casos")
     return fig
 
@@ -43,20 +85,23 @@ def barras_por_categoria(df: pd.DataFrame, cat: str, valor: str, top: int = 15,
                          titulo: str | None = None) -> go.Figure:
     agg = df.groupby(cat)[valor].sum().sort_values(ascending=False).head(top).reset_index()
     fig = px.bar(agg, x=cat, y=valor, template=PLANTILLA,
+                 color_discrete_sequence=[AZUL],
                  title=titulo or f"{valor} por {cat} (top {top})")
+    fig.update_traces(marker_line_width=0)
     fig.update_layout(xaxis_tickangle=-45)
     return fig
 
 
 def scatter_clusters(perfil: pd.DataFrame) -> go.Figure:
     d = perfil.reset_index()
-    d["cluster"] = d["cluster"].astype(str)
+    d["cluster"] = "Cluster " + d["cluster"].astype(str)
     fig = px.scatter(
         d, x="pca_1", y="pca_2", color="cluster",
         hover_data=["distrito", "departamento", "promedio_semanal", "maximo_semanal"],
-        template=PLANTILLA, title="Clusters de distritos (proyeccion PCA 2D)",
+        template=PLANTILLA, color_discrete_sequence=PALETTE,
+        title="Clusters de distritos (proyeccion PCA 2D)",
     )
-    fig.update_traces(marker=dict(size=8, opacity=0.75))
+    fig.update_traces(marker=dict(size=9, opacity=0.8, line=dict(width=1, color="white")))
     return fig
 
 
@@ -79,8 +124,9 @@ def matriz_confusion(tn: int, fp: int, fn: int, tp: int, titulo="Matriz de confu
     z = [[tn, fp], [fn, tp]]
     etiquetas = ["Predice 0", "Predice 1"]
     reales = ["Real 0", "Real 1"]
-    fig = px.imshow(z, x=etiquetas, y=reales, text_auto=True, color_continuous_scale="Blues",
+    fig = px.imshow(z, x=etiquetas, y=reales, text_auto=True, color_continuous_scale=AZUL_SEQ,
                     template=PLANTILLA, title=titulo)
+    fig.update_layout(coloraxis_showscale=False)
     return fig
 
 
@@ -98,18 +144,18 @@ def grafico_pronostico(train: pd.Series, test: pd.Series, pred_test: np.ndarray,
                        futuro: pd.DataFrame, titulo="Pronostico de casos") -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=train.index, y=train.values, name="Historico (train)",
-                             mode="lines", line=dict(color="#1f77b4")))
+                             mode="lines", line=dict(color=AZUL, width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=test.values, name="Real (test)",
-                             mode="lines", line=dict(color="#2ca02c")))
+                             mode="lines", line=dict(color="#008300", width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=pred_test, name="Estimado (test)",
-                             mode="lines", line=dict(color="#ff7f0e", dash="dash")))
+                             mode="lines", line=dict(color="#eda100", width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=futuro["fecha"], y=futuro["pronostico"],
                              name="Pronostico futuro", mode="lines+markers",
-                             line=dict(color="#d62728")))
+                             line=dict(color="#e34948", width=2)))
     fig.add_trace(go.Scatter(
         x=list(futuro["fecha"]) + list(futuro["fecha"][::-1]),
         y=list(futuro["superior"]) + list(futuro["inferior"][::-1]),
-        fill="toself", fillcolor="rgba(214,39,40,0.15)", line=dict(width=0),
+        fill="toself", fillcolor="rgba(227,73,72,0.14)", line=dict(width=0),
         name="Intervalo aprox.", hoverinfo="skip",
     ))
     fig.update_layout(template=PLANTILLA, title=titulo,

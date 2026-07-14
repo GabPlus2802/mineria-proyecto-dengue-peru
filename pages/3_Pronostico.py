@@ -4,14 +4,16 @@ import pandas as pd
 import streamlit as st
 
 import config
-from src import forecasting, loaders, visualizations as viz
+from src import forecasting, loaders, ui, visualizations as viz
 
-st.set_page_config(page_title="Pronostico", page_icon="📈", layout="wide")
-st.title("📈 Panel 3 — Pronostico de casos")
+ui.setup_page("Pronostico", "📈")
 
 if not loaders.artefactos_listos():
     st.error("Faltan artefactos. Ejecuta `python train.py --rebuild`.")
     st.stop()
+
+ui.hero("📈 Panel 3 — Pronostico de casos",
+        "Media movil (baseline) vs suavizado exponencial de Holt-Winters.")
 
 df = loaders.load_master()
 
@@ -43,12 +45,17 @@ if serie.sum() == 0 or len(serie) < 3 * config.MOVING_AVERAGE_WINDOW:
 ev = forecasting.evaluate_models(serie)
 mejor = ev["mejor_modelo"]
 
-st.subheader("Evaluacion en periodo de prueba (cronologico)")
-col = st.columns(4)
-col[0].metric("MAPE media movil", f"{ev['resultados']['media_movil']['mape']:.1f}%")
-col[1].metric("RMSE media movil", f"{ev['resultados']['media_movil']['rmse']:.1f}")
-col[2].metric("MAPE Holt-Winters", f"{ev['resultados']['holt_winters']['mape']:.1f}%")
-col[3].metric("RMSE Holt-Winters", f"{ev['resultados']['holt_winters']['rmse']:.1f}")
+ui.section("Evaluacion en periodo de prueba (cronologico)")
+ui.kpi_row([
+    {"label": "MAPE media movil", "value": f"{ev['resultados']['media_movil']['mape']:.1f}%",
+     "icon": "📉", "accent": "#898781"},
+    {"label": "RMSE media movil", "value": f"{ev['resultados']['media_movil']['rmse']:.1f}",
+     "icon": "📉", "accent": "#898781"},
+    {"label": "MAPE Holt-Winters", "value": f"{ev['resultados']['holt_winters']['mape']:.1f}%",
+     "icon": "📈", "accent": "#2a78d6"},
+    {"label": "RMSE Holt-Winters", "value": f"{ev['resultados']['holt_winters']['rmse']:.1f}",
+     "icon": "📈", "accent": "#2a78d6"},
+])
 st.success(f"Modelo elegido (menor RMSE): **{mejor}**")
 st.caption("MAPE seguro: se excluyen semanas con 0 casos reales para evitar division por cero.")
 
@@ -62,7 +69,7 @@ fig = viz.grafico_pronostico(
 )
 st.plotly_chart(fig, width='stretch')
 
-st.subheader(f"Pronostico de las proximas {periodos} semanas")
+ui.section(f"Pronostico de las proximas {periodos} semanas")
 st.dataframe(futuro.assign(
     pronostico=futuro["pronostico"].round(1),
     inferior=futuro["inferior"].round(1),

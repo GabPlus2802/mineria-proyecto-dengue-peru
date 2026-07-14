@@ -3,10 +3,11 @@
 import pandas as pd
 import streamlit as st
 
-from src import database, loaders
+from src import database, loaders, ui
 
-st.set_page_config(page_title="CRUD de consultas", page_icon="🗂️", layout="wide")
-st.title("🗂️ Panel 4 — Registro de consultas (CRUD)")
+ui.setup_page("CRUD de consultas", "🗂️")
+ui.hero("🗂️ Panel 4 — Registro de consultas (CRUD)",
+        "Crear, listar, editar y eliminar consultas con persistencia.")
 
 
 @st.cache_resource(show_spinner=False)
@@ -29,7 +30,7 @@ df = loaders.load_master() if loaders.artefactos_listos() else None
 # ---------------------------------------------------------------------------
 # CREAR
 # ---------------------------------------------------------------------------
-st.subheader("Crear consulta")
+ui.section("Crear consulta")
 prefill = st.session_state.get("ultima_prediccion", {})
 if prefill:
     st.caption("Prellenado con la ultima prediccion del Panel 2.")
@@ -63,7 +64,7 @@ if crear:
 # ---------------------------------------------------------------------------
 # LISTAR
 # ---------------------------------------------------------------------------
-st.subheader("Consultas registradas")
+ui.section("Consultas registradas")
 try:
     registros = db.list_all()
 except Exception as e:  # noqa: BLE001
@@ -83,7 +84,7 @@ st.dataframe(tabla[cols_mostrar], width='stretch', hide_index=True)
 # ---------------------------------------------------------------------------
 # EDITAR / ELIMINAR
 # ---------------------------------------------------------------------------
-st.subheader("Editar o eliminar")
+ui.section("Editar o eliminar")
 ids = tabla["id"].tolist()
 id_sel = st.selectbox("Selecciona el ID", ids)
 fila = tabla[tabla["id"] == id_sel].iloc[0]
