@@ -15,32 +15,34 @@ if not loaders.artefactos_listos():
     st.stop()
 
 ui.hero("🤖 Panel 2 — Modelo Predictivo y Explicabilidad",
-        "Random Forest vs XGBoost, umbral de decision, SHAP y prediccion en vivo.")
+        "5 modelos comparados, umbral de decision, SHAP y prediccion en vivo.")
 
 df = loaders.load_master()
 modelos = loaders.load_models()
 meta = modelos.get("meta") or {}
-pipelines = {"random_forest": modelos["random_forest"], "xgboost": modelos["xgboost"]}
+pipelines = loaders.load_clasificadores(modelos)
 data = modeling.get_modeling_frame(df)
 
 st.markdown(
     "**Objetivo:** predecir si un distrito superara su *alta incidencia* historica "
     "(percentil 75 del periodo de entrenamiento) en la **semana siguiente**. "
-    "Modelos entrenados con division temporal (test = ultimo anio, 2024)."
+    f"Se comparan **{len(pipelines)} modelos** entrenados con division temporal "
+    "(test = ultimo anio, 2024)."
 )
 
 # ---------------------------------------------------------------------------
 # Comparacion de modelos
 # ---------------------------------------------------------------------------
-ui.section("Comparacion de modelos (test 2024)")
+ui.section("Comparacion de modelos (test 2024)",
+           "Un modelo lineal, un arbol simple y tres ensembles compitiendo por el mejor F1.")
 umbral = st.slider("Umbral de decision", 0.1, 0.9,
                    float(meta.get("threshold", config.CLASSIFICATION_THRESHOLD)), 0.05)
 
 tabla = modeling.metrics_table(pipelines, data["X_test"], data["y_test"], threshold=umbral)
-st.dataframe(tabla, width='stretch')
+st.dataframe(tabla.rename(index=modeling.MODEL_LABELS), width='stretch')
 
 mejor = modeling.elegir_mejor_modelo(tabla)
-st.success(f"Mejor modelo por F1 con umbral {umbral}: **{mejor}** "
+st.success(f"Mejor modelo por F1 con umbral {umbral}: **{modeling.MODEL_LABELS.get(mejor, mejor)}** "
            f"(recall {tabla.loc[mejor,'recall']:.3f}, precision {tabla.loc[mejor,'precision']:.3f}, "
            f"ROC-AUC {tabla.loc[mejor,'roc_auc']:.3f})")
 st.caption("El ganador no se elige solo por accuracy: se prioriza el equilibrio recall/precision (F1).")
@@ -50,7 +52,7 @@ with col1:
     m = tabla.loc[mejor]
     st.plotly_chart(
         viz.matriz_confusion(int(m["tn"]), int(m["fp"]), int(m["fn"]), int(m["tp"]),
-                             f"Matriz de confusion — {mejor}"),
+                             f"Matriz de confusion — {modeling.MODEL_LABELS.get(mejor, mejor)}"),
         width='stretch',
     )
 with col2:
@@ -59,8 +61,8 @@ with col2:
     st.caption("Efecto del umbral en precision, recall y F1.")
 
 # Metricas POR CLASE del mejor modelo
-st.markdown(f"**Metricas por clase — {mejor}** (accuracy global: "
-            f"{tabla.loc[mejor, 'accuracy']:.3f})")
+st.markdown(f"**Metricas por clase — {modeling.MODEL_LABELS.get(mejor, mejor)}** "
+            f"(accuracy global: {tabla.loc[mejor, 'accuracy']:.3f})")
 st.dataframe(modeling.per_class_metrics(pipelines[mejor], data["X_test"],
              data["y_test"], threshold=umbral), width='stretch')
 st.caption("Clase 1 = alta incidencia la semana siguiente (clase minoritaria en entrenamiento). "
@@ -83,7 +85,14 @@ if bal is not None:
 # ---------------------------------------------------------------------------
 ui.section("Explicabilidad con SHAP",
            "Que variables influyen en la probabilidad predicha (asociacion, no causalidad).")
-modelo_shap = mejor if mejor in ("random_forest", "xgboost") else "random_forest"
+# Mejor modelo de arbol disponible (TreeExplainer). Prioriza el ganador si es de arbol.
+if mejor in modeling.MODELOS_ARBOL:
+    modelo_shap = mejor
+else:
+    modelo_shap = next((m for m in ["xgboost", "random_forest", "decision_tree"]
+                        if m in pipelines), "random_forest")
+st.caption(f"Explicando el modelo de arbol: **{modeling.MODEL_LABELS.get(modelo_shap, modelo_shap)}** "
+           "(SHAP TreeExplainer).")
 
 
 @st.cache_resource(show_spinner="Calculando valores SHAP...")
@@ -148,8 +157,11 @@ with st.form("form_prediccion"):
 
     casos_actual = c[2].number_input("Casos semana actual", 0, 5000, ultimo_casos)
     semana = c[3].number_input("Semana epidemiologica", 1, 53, ultima_semana)
-    modelo_pred = st.radio("Modelo", ["random_forest", "xgboost"],
-                           index=0 if mejor == "random_forest" else 1, horizontal=True)
+    opciones = list(pipelines)
+    modelo_pred = st.radio("Modelo", opciones,
+                           index=opciones.index(mejor) if mejor in opciones else 0,
+                           format_func=lambda k: modeling.MODEL_LABELS.get(k, k),
+                           horizontal=True)
     enviar = st.form_submit_button("Predecir", type="primary")
 
 if enviar:
@@ -162,27 +174,32 @@ if enviar:
         pred = int(proba >= umbral)
         ui.kpi_row([
             {"label": "Prediccion", "value": "ALTA incidencia" if pred else "Baja incidencia",
-             "icon": "🚨" if pred else "✅", "accent": "#e34948" if pred else "#008300"},
-            {"label": "Probabilidad", "value": f"{proba:.1%}", "icon": "🎯", "accent": "#2a78d6"},
-            {"label": "Modelo", "value": modelo_pred, "icon": "🤖", "accent": "#4a3aa7"},
+             "icon": "🚨" if pred else "✅", "accent": "#f87171" if pred else "#22c55e"},
+            {"label": "Probabilidad", "value": f"{proba:.1%}", "icon": "🎯", "accent": "#4c8dff"},
+            {"label": "Modelo", "value": modeling.MODEL_LABELS.get(modelo_pred, modelo_pred),
+             "icon": "🤖", "accent": "#a78bfa"},
         ])
 
-        # Explicacion local de esta prediccion
-        import shap
-        Xt1 = modeling.transform_X(pipe, fila)
-        nombres1 = modeling.transformed_feature_names(pipe)
-        expl1 = shap.TreeExplainer(pipe.named_steps["clf"])
-        sv1 = expl1.shap_values(Xt1)
-        b1 = expl1.expected_value
-        if isinstance(sv1, list):
-            sv1, b1 = sv1[1], b1[1]
-        elif getattr(sv1, "ndim", 2) == 3:
-            sv1, b1 = sv1[:, :, 1], (b1[1] if np.ndim(b1) else b1)
-        e = shap.Explanation(values=np.asarray(sv1)[0], base_values=float(np.ravel(b1)[0]),
-                             data=Xt1[0], feature_names=nombres1)
-        fig3 = plt.figure()
-        shap.plots.waterfall(e, max_display=10, show=False)
-        st.pyplot(fig3, clear_figure=True)
+        # Explicacion local de esta prediccion (solo modelos de arbol via TreeExplainer)
+        if modelo_pred in modeling.MODELOS_ARBOL:
+            import shap
+            Xt1 = modeling.transform_X(pipe, fila)
+            nombres1 = modeling.transformed_feature_names(pipe)
+            expl1 = shap.TreeExplainer(pipe.named_steps["clf"])
+            sv1 = expl1.shap_values(Xt1)
+            b1 = expl1.expected_value
+            if isinstance(sv1, list):
+                sv1, b1 = sv1[1], b1[1]
+            elif getattr(sv1, "ndim", 2) == 3:
+                sv1, b1 = sv1[:, :, 1], (b1[1] if np.ndim(b1) else b1)
+            e = shap.Explanation(values=np.asarray(sv1)[0], base_values=float(np.ravel(b1)[0]),
+                                 data=Xt1[0], feature_names=nombres1)
+            fig3 = plt.figure()
+            shap.plots.waterfall(e, max_display=10, show=False)
+            st.pyplot(fig3, clear_figure=True)
+        else:
+            st.caption("La explicacion local SHAP (TreeExplainer) esta disponible para los "
+                       "modelos de arbol (Random Forest, XGBoost, Arbol de Decision).")
 
         st.session_state["ultima_prediccion"] = {
             "departamento": dep, "distrito": dist_nombre, "semana": int(semana),

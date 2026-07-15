@@ -30,6 +30,7 @@ METRICAS_PRONOSTICO = DATA_PROCESSED / "metricas_pronostico.csv"
 PATH_PREPROCESSOR = MODELS_DIR / "preprocessor.joblib"
 PATH_RANDOM_FOREST = MODELS_DIR / "random_forest.joblib"
 PATH_XGBOOST = MODELS_DIR / "xgboost.joblib"
+PATH_MODELOS_EXTRA = MODELS_DIR / "modelos_extra.joblib"  # gradient_boosting, logistica, arbol
 PATH_KMEANS = MODELS_DIR / "kmeans.joblib"
 PATH_SCALER_CLUSTERING = MODELS_DIR / "scaler_clustering.joblib"
 PATH_MODEL_META = MODELS_DIR / "model_meta.joblib"

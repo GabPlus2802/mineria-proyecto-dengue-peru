@@ -166,9 +166,11 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
   K-means y se visualiza en **PCA 2D**. Resultado: 3 grupos (baja/media/alta transmisión).
 
 ### Panel 2 — Modelo Predictivo y Explicabilidad
-- **Modelos:** Random Forest y XGBoost dentro de un `Pipeline` con
+- **Modelos (5):** Random Forest, XGBoost, Gradient Boosting (HistGradientBoosting),
+  Regresión Logística y Árbol de Decisión, cada uno dentro de un `Pipeline` con
   `ColumnTransformer` (imputación + escala numérica, One-Hot con
   `handle_unknown="ignore"`). El preprocesador se ajusta **solo con entrenamiento**.
+  Se cubren tres familias: lineal (logística), árbol simple y ensembles.
 - **Desbalance:** la clase mayoritaria en train es ~90%, por lo que se aplica
   `class_weight="balanced"` (RF) y `scale_pos_weight` (XGBoost).
 - **Métricas:** accuracy, precision, recall, F1, ROC-AUC y matriz de confusión
@@ -198,12 +200,15 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 
 ## 7. Resultados reales (test = 2024)
 
-**Clasificación** (umbral 0.50):
+**Clasificación** (umbral 0.50, 5 modelos, ordenado por F1):
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
+| **Regresión Logística (mejor por F1)** | 0.775 | 0.764 | 0.807 | **0.785** | 0.859 |
+| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Gradient Boosting | 0.733 | 0.675 | 0.919 | 0.778 | 0.880 |
 | Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
-| XGBoost (mejor por F1) | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Árbol de Decisión | 0.725 | 0.670 | 0.907 | 0.771 | 0.871 |
 
 **Pronóstico nacional:** Holt-Winters MAPE **31.7 %** / RMSE 417 vs media móvil
 44.9 % / 459. **Clustering:** k = 3, silueta ≈ 0.35.

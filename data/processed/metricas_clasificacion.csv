@@ -1,3 +1,6 @@
 modelo,particion,accuracy,precision,recall,f1,roc_auc,tp,tn,fp,fn
 random_forest,test,0.7271,0.6689,0.9208,0.7749,0.8787,8976,4921,4444,772
 xgboost,test,0.7361,0.6799,0.912,0.779,0.8788,8890,5180,4185,858
+gradient_boosting,test,0.7329,0.6747,0.9194,0.7783,0.8798,8962,5045,4320,786
+logistic_regression,test,0.7745,0.7642,0.8067,0.7849,0.8585,7864,6939,2426,1884
+decision_tree,test,0.7248,0.6701,0.9069,0.7707,0.871,8840,5013,4352,908

@@ -53,7 +53,17 @@ def load_models() -> dict:
         ("meta", config.PATH_MODEL_META),
     ]:
         modelos[nombre] = joblib.load(ruta) if ruta.exists() else None
+    # Modelos adicionales (gradient_boosting, logistic_regression, decision_tree)
+    if config.PATH_MODELOS_EXTRA.exists():
+        modelos.update(joblib.load(config.PATH_MODELOS_EXTRA))
     return modelos
+
+
+def load_clasificadores(modelos: dict) -> dict:
+    """Devuelve solo los pipelines de clasificacion presentes, en orden."""
+    from src.modeling import MODEL_LABELS
+
+    return {k: modelos[k] for k in MODEL_LABELS if modelos.get(k) is not None}
 
 
 def artefactos_listos() -> bool:

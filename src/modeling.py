@@ -10,8 +10,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
@@ -22,10 +23,22 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 
 import config
 from src.preprocessing import FEATURE_CATEGORICAL, FEATURE_NUMERIC, TARGET
+
+# Nombres legibles y orden de presentacion de los modelos
+MODEL_LABELS = {
+    "random_forest": "Random Forest",
+    "xgboost": "XGBoost",
+    "gradient_boosting": "Gradient Boosting",
+    "logistic_regression": "Regresion Logistica",
+    "decision_tree": "Arbol de Decision",
+}
+# Modelos con soporte fiable de shap.TreeExplainer (HistGradientBoosting no se incluye)
+MODELOS_ARBOL = {"random_forest", "xgboost", "decision_tree"}
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +73,7 @@ def build_preprocessor() -> ColumnTransformer:
         ]
     )
     categorical = Pipeline(
-        [("onehot", OneHotEncoder(handle_unknown="ignore"))]
+        [("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]
     )
     return ColumnTransformer(
         [
@@ -104,8 +117,41 @@ def build_xgboost(scale_pos_weight: float) -> Pipeline:
     return Pipeline([("prep", build_preprocessor()), ("clf", clf)])
 
 
+def build_gradient_boosting(balanced: bool) -> Pipeline:
+    clf = HistGradientBoostingClassifier(
+        max_iter=config.XGB_N_ESTIMATORS,
+        learning_rate=config.XGB_LEARNING_RATE,
+        class_weight="balanced" if balanced else None,
+        random_state=config.RANDOM_STATE,
+    )
+    return Pipeline([("prep", build_preprocessor()), ("clf", clf)])
+
+
+def build_logistic_regression(balanced: bool) -> Pipeline:
+    clf = LogisticRegression(
+        max_iter=1000,
+        class_weight="balanced" if balanced else None,
+        random_state=config.RANDOM_STATE,
+        n_jobs=-1,
+    )
+    return Pipeline([("prep", build_preprocessor()), ("clf", clf)])
+
+
+def build_decision_tree(balanced: bool) -> Pipeline:
+    clf = DecisionTreeClassifier(
+        max_depth=12,
+        min_samples_leaf=getattr(config, "RF_MIN_SAMPLES_LEAF", 20),
+        class_weight="balanced" if balanced else None,
+        random_state=config.RANDOM_STATE,
+    )
+    return Pipeline([("prep", build_preprocessor()), ("clf", clf)])
+
+
 def train_models(data: dict):
-    """Entrena RF y XGBoost. Aplica balanceo si el desbalance supera 80/20."""
+    """Entrena 5 modelos (lineal, arbol simple y 3 ensembles).
+
+    Aplica balanceo de clases si el desbalance supera 80/20.
+    """
     y_train = data["y_train"]
     mayoria = _imbalance_ratio(y_train)
     balanced = mayoria > 0.80
@@ -113,14 +159,19 @@ def train_models(data: dict):
     n_pos = max(int((y_train == 1).sum()), 1)
     spw = n_neg / n_pos if balanced else 1.0
 
-    rf = build_random_forest(balanced)
-    xgb = build_xgboost(spw)
-    rf.fit(data["X_train"], y_train)
-    xgb.fit(data["X_train"], y_train)
+    modelos = {
+        "random_forest": build_random_forest(balanced),
+        "xgboost": build_xgboost(spw),
+        "gradient_boosting": build_gradient_boosting(balanced),
+        "logistic_regression": build_logistic_regression(balanced),
+        "decision_tree": build_decision_tree(balanced),
+    }
+    for pipe in modelos.values():
+        pipe.fit(data["X_train"], y_train)
 
     info = {"clase_mayoritaria": round(mayoria, 3), "balanceo_aplicado": balanced,
             "scale_pos_weight": round(spw, 2)}
-    return {"random_forest": rf, "xgboost": xgb}, info
+    return modelos, info
 
 
 # ---------------------------------------------------------------------------

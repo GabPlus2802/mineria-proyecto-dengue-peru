@@ -13,17 +13,18 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 # ---------------------------------------------------------------------------
-# Paleta y plantilla profesional (colores accesibles, validados para daltonismo)
+# Paleta y plantilla profesional para TEMA OSCURO
+# (colores categoricos accesibles, escalonados para superficie oscura)
 # ---------------------------------------------------------------------------
 # Categorica en orden fijo (identidad); no se cicla ni se reordena.
-PALETTE = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7",
-           "#e34948", "#e87ba4", "#eb6834"]
-AZUL = "#2a78d6"          # hue secuencial por defecto (magnitud)
-AZUL_SEQ = ["#cde2fb", "#9ec5f4", "#5598e7", "#2a78d6", "#184f95"]  # rampa clara->oscura
-TINTA = "#0b0b0b"
-TINTA_2 = "#52514e"
-GRID = "#e1e0d9"
-EJE = "#c3c2b7"
+PALETTE = ["#4c8dff", "#2dd4bf", "#f5b301", "#22c55e", "#a78bfa",
+           "#f87171", "#f472b6", "#fb923c"]
+AZUL = "#4c8dff"          # hue secuencial por defecto (magnitud)
+AZUL_SEQ = ["#12233f", "#1e4b86", "#2f6fd0", "#4c8dff", "#8fbaff"]  # oscuro->claro
+TINTA = "#e6e9ef"         # texto principal (claro)
+TINTA_2 = "#9aa4b2"       # texto secundario
+GRID = "#212836"          # rejilla tenue sobre fondo oscuro
+EJE = "#2f3847"
 
 _TEMPLATE = go.layout.Template(
     layout=dict(
@@ -40,7 +41,8 @@ _TEMPLATE = go.layout.Template(
                    tickfont=dict(color=TINTA_2), title=dict(font=dict(color=TINTA_2))),
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
         colorscale=dict(sequential=[[i / (len(AZUL_SEQ) - 1), c] for i, c in enumerate(AZUL_SEQ)]),
-        hoverlabel=dict(font=dict(family='system-ui, sans-serif', size=12)),
+        hoverlabel=dict(bgcolor="#141a24", bordercolor="#2f3847",
+                        font=dict(family='system-ui, sans-serif', size=12, color=TINTA)),
     )
 )
 pio.templates["dengue"] = _TEMPLATE
@@ -101,7 +103,7 @@ def scatter_clusters(perfil: pd.DataFrame) -> go.Figure:
         template=PLANTILLA, color_discrete_sequence=PALETTE,
         title="Clusters de distritos (proyeccion PCA 2D)",
     )
-    fig.update_traces(marker=dict(size=9, opacity=0.8, line=dict(width=1, color="white")))
+    fig.update_traces(marker=dict(size=9, opacity=0.85, line=dict(width=1, color="#0b0e14")))
     return fig
 
 
@@ -146,16 +148,16 @@ def grafico_pronostico(train: pd.Series, test: pd.Series, pred_test: np.ndarray,
     fig.add_trace(go.Scatter(x=train.index, y=train.values, name="Historico (train)",
                              mode="lines", line=dict(color=AZUL, width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=test.values, name="Real (test)",
-                             mode="lines", line=dict(color="#008300", width=2)))
+                             mode="lines", line=dict(color="#22c55e", width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=pred_test, name="Estimado (test)",
-                             mode="lines", line=dict(color="#eda100", width=2, dash="dash")))
+                             mode="lines", line=dict(color="#f5b301", width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=futuro["fecha"], y=futuro["pronostico"],
                              name="Pronostico futuro", mode="lines+markers",
-                             line=dict(color="#e34948", width=2)))
+                             line=dict(color="#f87171", width=2)))
     fig.add_trace(go.Scatter(
         x=list(futuro["fecha"]) + list(futuro["fecha"][::-1]),
         y=list(futuro["superior"]) + list(futuro["inferior"][::-1]),
-        fill="toself", fillcolor="rgba(227,73,72,0.14)", line=dict(width=0),
+        fill="toself", fillcolor="rgba(248,113,113,0.16)", line=dict(width=0),
         name="Intervalo aprox.", hoverinfo="skip",
     ))
     fig.update_layout(template=PLANTILLA, title=titulo,

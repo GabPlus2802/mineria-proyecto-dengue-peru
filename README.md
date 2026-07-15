@@ -171,18 +171,25 @@ streamlit run app.py
 | Tarea | Modelos |
 |---|---|
 | Clustering | K-means (`k` por codo + silueta, PCA 2D) |
-| Clasificación | Random Forest y XGBoost (baseline: balanceo de clases) |
-| Explicabilidad | SHAP (`TreeExplainer`) |
+| Clasificación | **5 modelos**: Random Forest, XGBoost, Gradient Boosting, Regresión Logística y Árbol de Decisión (con balanceo de clases) |
+| Explicabilidad | SHAP (`TreeExplainer` sobre el mejor modelo de árbol) |
 | Pronóstico | Media móvil (baseline) y Holt-Winters (suavizado exponencial) |
 
 ## 12. Métricas (ejecución real, test = 2024)
 
-**Clasificación** (umbral 0.50):
+**Clasificación** (umbral 0.50), ordenado por F1:
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
+| **Regresión Logística (mejor por F1)** | 0.775 | 0.764 | 0.807 | **0.785** | 0.859 |
+| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Gradient Boosting | 0.733 | 0.675 | 0.919 | 0.778 | 0.880 |
 | Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
-| XGBoost (mejor por F1) | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
+| Árbol de Decisión | 0.725 | 0.670 | 0.907 | 0.771 | 0.871 |
+
+> Nota: los modelos de árbol logran mayor **recall** de la clase minoritaria (~0.91),
+> útil si el costo de un falso negativo es alto; la Regresión Logística ofrece el mejor
+> **equilibrio** (F1). El mejor modelo se elige automáticamente por F1.
 
 **Pronóstico** (serie nacional):
 

@@ -58,7 +58,9 @@ def maestro_sintetico():
 def test_modelos_se_entrenan(maestro_sintetico):
     data = modeling.get_modeling_frame(maestro_sintetico)
     models, info = modeling.train_models(data)
-    assert set(models) == {"random_forest", "xgboost"}
+    # 5 modelos: lineal, arbol simple y tres ensembles
+    assert set(models) == {"random_forest", "xgboost", "gradient_boosting",
+                           "logistic_regression", "decision_tree"}
     assert "balanceo_aplicado" in info
 
 

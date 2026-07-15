@@ -1,12 +1,11 @@
-# Tema profesional del dashboard (paleta accesible, validada para daltonismo).
+# Tema oscuro profesional del dashboard.
 [theme]
-base = "light"
-primaryColor = "#2a78d6"          # azul principal (acciones, acentos)
-backgroundColor = "#f4f5f7"       # plano de la pagina (gris muy claro)
-secondaryBackgroundColor = "#ffffff"  # tarjetas, sidebar y widgets
-textColor = "#0b0b0b"             # tinta primaria
+base = "dark"
+primaryColor = "#4c8dff"          # azul de acento (acciones, foco)
+backgroundColor = "#0b0e14"       # plano de la pagina (casi negro azulado)
+secondaryBackgroundColor = "#141a24"  # tarjetas, sidebar y widgets
+textColor = "#e6e9ef"             # texto principal
 font = "sans serif"
 
 [server]
-# Evita recargas innecesarias en despliegue.
 runOnSave = false

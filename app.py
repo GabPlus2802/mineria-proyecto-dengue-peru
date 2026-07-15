@@ -7,7 +7,7 @@ Ejecutar con:  streamlit run app.py
 import streamlit as st
 
 import config
-from src import loaders, ui
+from src import loaders, modeling, ui
 
 ui.setup_page("Dengue Peru | Mineria de Datos", "🦟")
 
@@ -30,15 +30,15 @@ if not listo:
 df = loaders.load_master()
 ui.kpi_row([
     {"label": "Registros distrito-semana", "value": f"{len(df):,}", "icon": "📅",
-     "accent": "#2a78d6"},
+     "accent": "#4c8dff"},
     {"label": "Casos totales", "value": f"{int(df['casos'].sum()):,}", "icon": "🦟",
-     "accent": "#e34948"},
+     "accent": "#f87171"},
     {"label": "Distritos", "value": df["ubigeo"].nunique(), "icon": "📍",
-     "accent": "#1baf7a"},
+     "accent": "#2dd4bf"},
     {"label": "Departamentos", "value": df["departamento"].nunique(), "icon": "🗺️",
-     "accent": "#eda100"},
+     "accent": "#f5b301"},
     {"label": "Periodo", "value": f"{int(df['ano'].min())}–{int(df['ano'].max())}",
-     "icon": "⏱️", "accent": "#4a3aa7"},
+     "icon": "⏱️", "accent": "#a78bfa"},
 ])
 
 col1, col2 = st.columns([2, 1], gap="large")
@@ -67,7 +67,7 @@ siguiente, **explicar** las predicciones y **pronosticar** los proximos periodos
     with p[1]:
         with st.container(border=True):
             st.markdown("#### 🤖 2 · Modelo Predictivo")
-            st.caption("Random Forest vs XGBoost, umbral, SHAP y formulario de prediccion.")
+            st.caption("5 modelos comparados, umbral, SHAP y formulario de prediccion.")
         with st.container(border=True):
             st.markdown("#### 🗂️ 4 · CRUD de consultas")
             st.caption("Registrar, listar, editar y eliminar consultas (Supabase o local).")
@@ -91,11 +91,16 @@ Plataforma Nacional de Datos Abiertos del Peru.
     modelos = loaders.load_models()
     meta = modelos.get("meta") or {}
     with st.container(border=True):
-        for nombre in ["random_forest", "xgboost", "kmeans", "preprocessor"]:
-            ok = modelos.get(nombre) is not None
-            st.write(("✅ " if ok else "❌ ") + nombre)
+        clasif = loaders.load_clasificadores(modelos)
+        st.markdown(f"**{len(clasif)} clasificadores** entrenados:")
+        for nombre in clasif:
+            st.write("✅ " + modeling.MODEL_LABELS.get(nombre, nombre))
+        for extra in ["kmeans", "preprocessor"]:
+            ok = modelos.get(extra) is not None
+            st.write(("✅ " if ok else "❌ ") + extra)
         if meta:
-            st.caption(f"Mejor clasificador: **{meta.get('mejor_modelo', '—')}** "
+            mejor = meta.get("mejor_modelo", "—")
+            st.caption(f"Mejor clasificador: **{modeling.MODEL_LABELS.get(mejor, mejor)}** "
                        f"(umbral {meta.get('threshold', config.CLASSIFICATION_THRESHOLD)})")
 
 st.divider()

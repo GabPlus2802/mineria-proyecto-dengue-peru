@@ -87,6 +87,8 @@ def entrenar_clasificacion(df: pd.DataFrame):
     joblib.dump(prep, config.PATH_PREPROCESSOR, compress=3)
     joblib.dump(models["random_forest"], config.PATH_RANDOM_FOREST, compress=3)
     joblib.dump(models["xgboost"], config.PATH_XGBOOST, compress=3)
+    extra = {k: models[k] for k in ("gradient_boosting", "logistic_regression", "decision_tree")}
+    joblib.dump(extra, config.PATH_MODELOS_EXTRA, compress=3)
     joblib.dump(
         {
             "mejor_modelo": mejor,

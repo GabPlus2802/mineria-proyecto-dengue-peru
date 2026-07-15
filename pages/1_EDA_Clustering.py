@@ -39,13 +39,13 @@ if dep_sel != "(Todos)":
 # ---------------------------------------------------------------------------
 ui.section("Resumen", "Indicadores segun los filtros seleccionados.")
 ui.kpi_row([
-    {"label": "Registros", "value": f"{len(f):,}", "icon": "📅", "accent": "#2a78d6"},
+    {"label": "Registros", "value": f"{len(f):,}", "icon": "📅", "accent": "#4c8dff"},
     {"label": "Total de casos", "value": f"{int(f['casos'].sum()):,}", "icon": "🦟",
-     "accent": "#e34948"},
+     "accent": "#f87171"},
     {"label": "Departamentos", "value": f["departamento"].nunique(), "icon": "🗺️",
-     "accent": "#eda100"},
-    {"label": "Distritos", "value": f["ubigeo"].nunique(), "icon": "📍", "accent": "#1baf7a"},
-    {"label": "Periodo", "value": f"{rango[0]}–{rango[1]}", "icon": "⏱️", "accent": "#4a3aa7"},
+     "accent": "#f5b301"},
+    {"label": "Distritos", "value": f["ubigeo"].nunique(), "icon": "📍", "accent": "#2dd4bf"},
+    {"label": "Periodo", "value": f"{rango[0]}–{rango[1]}", "icon": "⏱️", "accent": "#a78bfa"},
 ])
 
 # ---------------------------------------------------------------------------
@@ -103,11 +103,11 @@ if len(casos_pos) > 0:
     lim_inf, lim_sup = q1 - 1.5 * iqr, q3 + 1.5 * iqr
     outliers = f[(f["casos"] > lim_sup)]
     ui.kpi_row([
-        {"label": "Limite superior", "value": f"{lim_sup:.1f}", "icon": "📏", "accent": "#2a78d6"},
-        {"label": "Semanas outlier", "value": f"{len(outliers):,}", "icon": "⚠️", "accent": "#eb6834"},
+        {"label": "Limite superior", "value": f"{lim_sup:.1f}", "icon": "📏", "accent": "#4c8dff"},
+        {"label": "Semanas outlier", "value": f"{len(outliers):,}", "icon": "⚠️", "accent": "#fb923c"},
         {"label": "% del total", "value": f"{100*len(outliers)/max(len(f),1):.2f}%",
-         "icon": "％", "accent": "#eda100"},
-        {"label": "Caso maximo", "value": f"{int(f['casos'].max()):,}", "icon": "🔺", "accent": "#e34948"},
+         "icon": "％", "accent": "#f5b301"},
+        {"label": "Caso maximo", "value": f"{int(f['casos'].max()):,}", "icon": "🔺", "accent": "#f87171"},
     ])
     st.info(
         "Los valores altos corresponden a semanas epidemicas reales; **no se eliminan** "
