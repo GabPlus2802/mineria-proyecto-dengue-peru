@@ -30,15 +30,15 @@ if not listo:
 df = loaders.load_master()
 ui.kpi_row([
     {"label": "Registros distrito-semana", "value": f"{len(df):,}", "icon": "📅",
-     "accent": "#4c8dff"},
+     "accent": "#3b82f6"},
     {"label": "Casos totales", "value": f"{int(df['casos'].sum()):,}", "icon": "🦟",
-     "accent": "#f87171"},
+     "accent": "#ef4444"},
     {"label": "Distritos", "value": df["ubigeo"].nunique(), "icon": "📍",
-     "accent": "#2dd4bf"},
+     "accent": "#0ea5a4"},
     {"label": "Departamentos", "value": df["departamento"].nunique(), "icon": "🗺️",
-     "accent": "#f5b301"},
+     "accent": "#f59e0b"},
     {"label": "Periodo", "value": f"{int(df['ano'].min())}–{int(df['ano'].max())}",
-     "icon": "⏱️", "accent": "#a78bfa"},
+     "icon": "⏱️", "accent": "#8b5cf6"},
 ])
 
 col1, col2 = st.columns([2, 1], gap="large")

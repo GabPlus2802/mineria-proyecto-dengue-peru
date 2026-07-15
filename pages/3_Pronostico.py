@@ -52,9 +52,9 @@ ui.kpi_row([
     {"label": "RMSE media movil", "value": f"{ev['resultados']['media_movil']['rmse']:.1f}",
      "icon": "📉", "accent": "#6b7688"},
     {"label": "MAPE Holt-Winters", "value": f"{ev['resultados']['holt_winters']['mape']:.1f}%",
-     "icon": "📈", "accent": "#4c8dff"},
+     "icon": "📈", "accent": "#3b82f6"},
     {"label": "RMSE Holt-Winters", "value": f"{ev['resultados']['holt_winters']['rmse']:.1f}",
-     "icon": "📈", "accent": "#4c8dff"},
+     "icon": "📈", "accent": "#3b82f6"},
 ])
 st.success(f"Modelo elegido (menor RMSE): **{mejor}**")
 st.caption("MAPE seguro: se excluyen semanas con 0 casos reales para evitar division por cero.")

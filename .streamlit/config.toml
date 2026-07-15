@@ -1,10 +1,10 @@
-# Tema oscuro profesional del dashboard.
+# Tema claro elegante (estetica tipo ChurnSense: acento turquesa, superficies claras).
 [theme]
-base = "dark"
-primaryColor = "#4c8dff"          # azul de acento (acciones, foco)
-backgroundColor = "#0b0e14"       # plano de la pagina (casi negro azulado)
-secondaryBackgroundColor = "#141a24"  # tarjetas, sidebar y widgets
-textColor = "#e6e9ef"             # texto principal
+base = "light"
+primaryColor = "#0ea5a4"          # turquesa de acento (acciones, foco, sliders)
+backgroundColor = "#f4f7fa"       # plano de la pagina (gris muy claro)
+secondaryBackgroundColor = "#ffffff"  # tarjetas, sidebar y widgets
+textColor = "#0f172a"             # tinta principal (slate)
 font = "sans serif"
 
 [server]

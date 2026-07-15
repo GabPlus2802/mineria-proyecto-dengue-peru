@@ -13,18 +13,23 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 # ---------------------------------------------------------------------------
-# Paleta y plantilla profesional para TEMA OSCURO
-# (colores categoricos accesibles, escalonados para superficie oscura)
+# Paleta y plantilla para TEMA CLARO (estetica tipo ChurnSense)
 # ---------------------------------------------------------------------------
+# Acentos de marca
+TEAL = "#0ea5a4"          # turquesa principal (magnitud / marca)
+TEAL_DARK = "#0d7d72"
+CORAL = "#f43f5e"         # empuje "negativo" en SHAP / riesgo
+CORAL_SOFT = "#fb7185"
 # Categorica en orden fijo (identidad); no se cicla ni se reordena.
-PALETTE = ["#4c8dff", "#2dd4bf", "#f5b301", "#22c55e", "#a78bfa",
-           "#f87171", "#f472b6", "#fb923c"]
-AZUL = "#4c8dff"          # hue secuencial por defecto (magnitud)
-AZUL_SEQ = ["#12233f", "#1e4b86", "#2f6fd0", "#4c8dff", "#8fbaff"]  # oscuro->claro
-TINTA = "#e6e9ef"         # texto principal (claro)
-TINTA_2 = "#9aa4b2"       # texto secundario
-GRID = "#212836"          # rejilla tenue sobre fondo oscuro
-EJE = "#2f3847"
+PALETTE = ["#0ea5a4", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444",
+           "#ec4899", "#16a34a", "#f97316"]
+AZUL = TEAL               # alias historico usado en los graficos
+AZUL_SEQ = ["#d5f5f0", "#9ee7db", "#5fd0c0", "#14b8a6", "#0d7d72"]  # claro->oscuro (teal)
+TINTA = "#0f172a"         # texto principal (slate oscuro)
+TINTA_2 = "#475569"       # texto secundario
+MUTED = "#94a3b8"
+GRID = "#e8edf3"          # rejilla tenue sobre fondo claro
+EJE = "#cbd5e1"
 
 _TEMPLATE = go.layout.Template(
     layout=dict(
@@ -41,7 +46,7 @@ _TEMPLATE = go.layout.Template(
                    tickfont=dict(color=TINTA_2), title=dict(font=dict(color=TINTA_2))),
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
         colorscale=dict(sequential=[[i / (len(AZUL_SEQ) - 1), c] for i, c in enumerate(AZUL_SEQ)]),
-        hoverlabel=dict(bgcolor="#141a24", bordercolor="#2f3847",
+        hoverlabel=dict(bgcolor="#ffffff", bordercolor="#e2e8f0",
                         font=dict(family='system-ui, sans-serif', size=12, color=TINTA)),
     )
 )
@@ -103,7 +108,7 @@ def scatter_clusters(perfil: pd.DataFrame) -> go.Figure:
         template=PLANTILLA, color_discrete_sequence=PALETTE,
         title="Clusters de distritos (proyeccion PCA 2D)",
     )
-    fig.update_traces(marker=dict(size=9, opacity=0.85, line=dict(width=1, color="#0b0e14")))
+    fig.update_traces(marker=dict(size=9, opacity=0.85, line=dict(width=1, color="#ffffff")))
     return fig
 
 
@@ -146,20 +151,68 @@ def grafico_pronostico(train: pd.Series, test: pd.Series, pred_test: np.ndarray,
                        futuro: pd.DataFrame, titulo="Pronostico de casos") -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=train.index, y=train.values, name="Historico (train)",
-                             mode="lines", line=dict(color=AZUL, width=2)))
+                             mode="lines", line=dict(color="#3b82f6", width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=test.values, name="Real (test)",
-                             mode="lines", line=dict(color="#22c55e", width=2)))
+                             mode="lines", line=dict(color=TEAL, width=2)))
     fig.add_trace(go.Scatter(x=test.index, y=pred_test, name="Estimado (test)",
-                             mode="lines", line=dict(color="#f5b301", width=2, dash="dash")))
+                             mode="lines", line=dict(color="#f59e0b", width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=futuro["fecha"], y=futuro["pronostico"],
                              name="Pronostico futuro", mode="lines+markers",
-                             line=dict(color="#f87171", width=2)))
+                             line=dict(color=CORAL, width=2)))
     fig.add_trace(go.Scatter(
         x=list(futuro["fecha"]) + list(futuro["fecha"][::-1]),
         y=list(futuro["superior"]) + list(futuro["inferior"][::-1]),
-        fill="toself", fillcolor="rgba(248,113,113,0.16)", line=dict(width=0),
+        fill="toself", fillcolor="rgba(244,63,94,0.12)", line=dict(width=0),
         name="Intervalo aprox.", hoverinfo="skip",
     ))
     fig.update_layout(template=PLANTILLA, title=titulo,
                       xaxis_title="Fecha", yaxis_title="Casos")
+    return fig
+
+
+def medidor_probabilidad(proba: float, umbral: float = 0.5,
+                         titulo: str = "Probabilidad") -> go.Figure:
+    """Medidor circular tipo ChurnSense para la probabilidad de alta incidencia."""
+    color = CORAL if proba >= umbral else TEAL
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=proba * 100,
+        number={"suffix": "%", "font": {"size": 40, "color": color}},
+        gauge={
+            "axis": {"range": [0, 100], "tickcolor": MUTED,
+                     "tickfont": {"color": MUTED, "size": 10}},
+            "bar": {"color": color, "thickness": 0.28},
+            "bgcolor": "rgba(0,0,0,0)",
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0, umbral * 100], "color": "rgba(14,165,164,0.12)"},
+                {"range": [umbral * 100, 100], "color": "rgba(244,63,94,0.12)"},
+            ],
+            "threshold": {"line": {"color": TINTA_2, "width": 2}, "thickness": 0.8,
+                          "value": umbral * 100},
+        },
+        title={"text": titulo.upper(), "font": {"size": 12, "color": MUTED}},
+    ))
+    fig.update_layout(template=PLANTILLA, height=250, margin=dict(l=20, r=20, t=50, b=10))
+    return fig
+
+
+def barras_contribucion_shap(nombres, valores, titulo="Contribucion de cada variable",
+                             top: int = 10) -> go.Figure:
+    """Barras horizontales de valores SHAP (teal = hacia baja; coral = hacia alta)."""
+    import numpy as np
+
+    orden = np.argsort(np.abs(valores))[::-1][:top]
+    nom = [nombres[i] for i in orden][::-1]
+    val = [float(valores[i]) for i in orden][::-1]
+    colores = [CORAL if v > 0 else TEAL for v in val]
+    fig = go.Figure(go.Bar(
+        x=val, y=nom, orientation="h", marker_color=colores,
+        text=[f"{v:+.2f}" for v in val], textposition="outside",
+        textfont=dict(color=TINTA_2, size=11),
+    ))
+    fig.update_layout(template=PLANTILLA, title=titulo, height=max(260, 34 * len(nom) + 90),
+                      xaxis_title="Valor SHAP (log-odds)", bargap=0.35,
+                      margin=dict(l=10, r=30, t=52, b=40))
+    fig.add_vline(x=0, line_width=1, line_color=EJE)
     return fig

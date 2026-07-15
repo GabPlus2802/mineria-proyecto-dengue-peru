@@ -42,6 +42,15 @@ tabla = modeling.metrics_table(pipelines, data["X_test"], data["y_test"], thresh
 st.dataframe(tabla.rename(index=modeling.MODEL_LABELS), width='stretch')
 
 mejor = modeling.elegir_mejor_modelo(tabla)
+base_rate = float(data["y_test"].mean())
+ui.stat_chips([
+    {"label": "Modelo", "value": modeling.MODEL_LABELS.get(mejor, mejor)},
+    {"label": "ROC-AUC", "value": f"{tabla.loc[mejor, 'roc_auc']:.3f}"},
+    {"label": "F1", "value": f"{tabla.loc[mejor, 'f1']:.3f}"},
+    {"label": "Base rate", "value": f"{base_rate:.1%}"},
+    {"label": "Umbral", "value": f"{umbral:.2f}"},
+])
+st.write("")
 st.success(f"Mejor modelo por F1 con umbral {umbral}: **{modeling.MODEL_LABELS.get(mejor, mejor)}** "
            f"(recall {tabla.loc[mejor,'recall']:.3f}, precision {tabla.loc[mejor,'precision']:.3f}, "
            f"ROC-AUC {tabla.loc[mejor,'roc_auc']:.3f})")
@@ -172,31 +181,47 @@ if enviar:
         pipe = pipelines[modelo_pred]
         proba = float(pipe.predict_proba(fila)[0, 1])
         pred = int(proba >= umbral)
-        ui.kpi_row([
-            {"label": "Prediccion", "value": "ALTA incidencia" if pred else "Baja incidencia",
-             "icon": "🚨" if pred else "✅", "accent": "#f87171" if pred else "#22c55e"},
-            {"label": "Probabilidad", "value": f"{proba:.1%}", "icon": "🎯", "accent": "#4c8dff"},
-            {"label": "Modelo", "value": modeling.MODEL_LABELS.get(modelo_pred, modelo_pred),
-             "icon": "🤖", "accent": "#a78bfa"},
-        ])
 
-        # Explicacion local de esta prediccion (solo modelos de arbol via TreeExplainer)
+        col_g, col_r = st.columns([1, 1.35], gap="large")
+        with col_g:
+            st.plotly_chart(viz.medidor_probabilidad(proba, umbral,
+                            "Probabilidad de alta incidencia"), width='stretch')
+        with col_r:
+            estado = "Riesgo ALTO" if pred else "Riesgo bajo"
+            desc = ("El perfil se acerca al comportamiento de alta incidencia."
+                    if pred else "El perfil se aleja del comportamiento de alta incidencia.")
+            ui.kpi_row([
+                {"label": "Estado", "value": estado, "icon": "🚨" if pred else "✅",
+                 "accent": "#ef4444" if pred else "#16a34a"},
+                {"label": "Modelo", "value": modeling.MODEL_LABELS.get(modelo_pred, modelo_pred),
+                 "icon": "🤖", "accent": "#0ea5a4"},
+            ])
+            st.write("")
+            if pred:
+                ui.callout("<b>Vigilar.</b> Reforzar prevencion y monitoreo del distrito "
+                           "en las proximas semanas.")
+            else:
+                ui.callout("<b>Mantener.</b> Sin accion prioritaria; seguir el monitoreo "
+                           "en el ciclo normal.")
+            st.caption(desc)
+
+        # Contribucion de cada variable (SHAP local, estilo force plot) para arboles
         if modelo_pred in modeling.MODELOS_ARBOL:
             import shap
             Xt1 = modeling.transform_X(pipe, fila)
-            nombres1 = modeling.transformed_feature_names(pipe)
+            nombres1 = [n.split("__")[-1].replace("_", " ")
+                        for n in modeling.transformed_feature_names(pipe)]
             expl1 = shap.TreeExplainer(pipe.named_steps["clf"])
             sv1 = expl1.shap_values(Xt1)
-            b1 = expl1.expected_value
             if isinstance(sv1, list):
-                sv1, b1 = sv1[1], b1[1]
+                sv1 = sv1[1]
             elif getattr(sv1, "ndim", 2) == 3:
-                sv1, b1 = sv1[:, :, 1], (b1[1] if np.ndim(b1) else b1)
-            e = shap.Explanation(values=np.asarray(sv1)[0], base_values=float(np.ravel(b1)[0]),
-                                 data=Xt1[0], feature_names=nombres1)
-            fig3 = plt.figure()
-            shap.plots.waterfall(e, max_display=10, show=False)
-            st.pyplot(fig3, clear_figure=True)
+                sv1 = sv1[:, :, 1]
+            ui.section("Contribucion de cada variable", tag="valores SHAP · este cliente")
+            st.plotly_chart(viz.barras_contribucion_shap(nombres1, np.asarray(sv1)[0]),
+                            width='stretch')
+            st.caption("Coral = empuja hacia ALTA incidencia · turquesa = empuja hacia baja. "
+                       "SHAP muestra asociacion, no causalidad.")
         else:
             st.caption("La explicacion local SHAP (TreeExplainer) esta disponible para los "
                        "modelos de arbol (Random Forest, XGBoost, Arbol de Decision).")
