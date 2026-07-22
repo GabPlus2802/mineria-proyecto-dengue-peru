@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 
 import config
 
+# Todas las columnas del perfil (sirven para describir e interpretar los grupos)
 PERFIL_COLS = [
     "promedio_semanal",
     "mediana_semanal",
@@ -25,6 +26,26 @@ PERFIL_COLS = [
     "crecimiento_promedio",
     "frecuencia_semanas_con_casos",
     "semana_pico",
+]
+
+# Subconjunto que ALIMENTA a K-means. Describe la intensidad de la transmision en
+# cuatro angulos: magnitud tipica (promedio, mediana), magnitud extrema (maximo),
+# irregularidad (desviacion) y persistencia (frecuencia de semanas con casos).
+#
+# Las tres columnas restantes se calculan y se muestran, pero NO agrupan:
+#   - semana_pico es CIRCULAR (la semana 52 y la 1 son vecinas). Tratada como
+#     una distancia lineal, K-means cree que estan a 51 semanas y mete ruido.
+#   - pct_semanas_alta se deriva de la variable OBJETIVO de la clasificacion.
+#     Meterla aqui contamina un analisis no supervisado con una etiqueta
+#     construida para otro problema.
+#   - crecimiento_promedio es un promedio de razones semana a semana: en los
+#     distritos con pocos casos esta dominado por el ruido y no informa del nivel.
+CLUSTER_COLS = [
+    "promedio_semanal",
+    "mediana_semanal",
+    "maximo_semanal",
+    "desviacion_semanal",
+    "frecuencia_semanas_con_casos",
 ]
 
 
@@ -86,7 +107,7 @@ def run_kmeans(perfil: pd.DataFrame, k: int | None = None):
     perfil con etiqueta de cluster y coordenadas PCA 2D.
     """
     scaler = StandardScaler()
-    X = scaler.fit_transform(perfil[PERFIL_COLS].values)
+    X = scaler.fit_transform(perfil[CLUSTER_COLS].values)
 
     evaluacion = evaluar_k(X)
     # Seleccion: mejor silueta; si config fija K_SELECTED, se respeta.

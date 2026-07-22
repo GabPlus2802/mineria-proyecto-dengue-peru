@@ -258,12 +258,22 @@ Todo es desactivable con `python train.py --sin-simulacion` o
 | Random Forest | 0.720 | 0.660 | 0.923 | 0.769 | 0.875 |
 | Árbol de Decisión | 0.716 | 0.660 | 0.908 | 0.764 | 0.867 |
 
-**Pronóstico nacional** (ventana de 13 semanas): Holt-Winters MAPE **26.6 %** /
-RMSE 2 597 vs media móvil 43.0 % / 4 205. Con ventana de 8 semanas el orden se
-invierte: ver la tabla de robustez del §12 del README.
+**Pronóstico nacional** (ventana de 13 semanas, medido **solo sobre datos
+observados**): Holt-Winters MAPE **27.2 %** / RMSE 313 vs media móvil 42.4 % / 464.
+Holt-Winters gana también con ventanas de 8 y 26 semanas: ver la tabla de
+robustez del §12 del README.
 
-**Clustering:** k = 3, silueta ≈ 0.353 (342 distritos de baja transmisión, 195 de
-media y 34 de alta).
+El modelo se ajusta en **escala logarítmica con tendencia amortiguada**. Los
+brotes crecen de forma multiplicativa, así que `log(1+casos)` estabiliza la
+varianza e impide que el pico de 2023–2024 domine el ajuste; la amortiguación
+evita extrapolar una caída indefinida tras un pico. El intervalo resultante es
+asimétrico, que es lo correcto para un conteo.
+
+**Clustering:** k = 3, silueta ≈ **0.569** (437 distritos de transmisión
+esporádica, 111 estacional y 23 alta y sostenida). K-means usa 5 de las 8
+variables del perfil: se excluyen `semana_pico` (circular), `pct_semanas_alta`
+(derivada del objetivo de la clasificación) y `crecimiento_promedio` (dominada
+por el ruido en distritos con pocos casos).
 
 > Los números exactos se regeneran con `python train.py` y quedan en
 > `data/processed/metricas_*.csv`; deben coincidir con lo mostrado en el dashboard.

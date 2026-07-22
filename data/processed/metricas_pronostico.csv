@@ -1,3 +1,3 @@
 modelo,mape,rmse,elegido
-media_movil,42.986,4205.402,False
-holt_winters,26.566,2597.163,True
+media_movil,42.384,464.35,False
+holt_winters,27.194,312.591,True

@@ -49,9 +49,14 @@ ventana = st.sidebar.slider("Semanas reservadas para evaluar", 8, 26,
                                  "prueba. Que modelo gana depende de este valor: mira "
                                  "la tabla de robustez mas abajo.")
 
+# La serie completa (con el tramo proyectado) es de donde ARRANCA el pronostico.
 serie = forecasting.build_series(df, nivel=nivel, clave=clave)
+# La evaluacion se hace SOLO sobre notificaciones observadas: si la ventana de
+# prueba cayera en el tramo proyectado, mediriamos que tan bien el modelo
+# reproduce nuestra propia proyeccion.
+serie_eval = forecasting.serie_para_evaluar(df, nivel=nivel, clave=clave)
 
-if serie.empty or serie.sum() == 0 or len(serie) < ventana + 3 * config.MOVING_AVERAGE_WINDOW:
+if serie.empty or serie.sum() == 0 or len(serie_eval) < ventana + 3 * config.MOVING_AVERAGE_WINDOW:
     st.warning("La serie seleccionada no tiene suficiente historia para un pronostico "
                "confiable. Prueba con un nivel mas agregado (nacional o departamento).")
     st.stop()
@@ -59,12 +64,13 @@ if serie.empty or serie.sum() == 0 or len(serie) < ventana + 3 * config.MOVING_A
 # ---------------------------------------------------------------------------
 # Evaluacion
 # ---------------------------------------------------------------------------
-ev = forecasting.evaluate_models(serie, ventana)
+ev = forecasting.evaluate_models(serie_eval, ventana)
 mejor = ev["mejor_modelo"]
 NOMBRES = {"media_movil": "Media movil", "holt_winters": "Holt-Winters"}
 
-ui.section("Evaluacion en el periodo de prueba", f"{etiqueta} — las ultimas "
-           f"{ventana} semanas de la serie se reservan y no se usan para ajustar.")
+ui.section("Evaluacion en el periodo de prueba", f"{etiqueta} — se reservan las "
+           f"ultimas {ventana} semanas <b>de notificaciones observadas</b> "
+           f"(hasta {serie_eval.index.max():%m/%Y}) y no se usan para ajustar.")
 ui.kpi_row([
     {"label": "MAPE media movil",
      "value": f"{ev['resultados']['media_movil']['mape']:.1f}%",
@@ -83,6 +89,9 @@ ui.kpi_row([
 ])
 st.caption("MAPE seguro: se excluyen las semanas con 0 casos reales para no dividir "
            "entre cero. El modelo se elige por RMSE, que no sufre ese problema.")
+ui.nota("Estas metricas se calculan <b>solo con datos observados</b>. Evaluarlas "
+        "sobre el tramo proyectado mediria que tan bien el modelo reproduce la "
+        "propia proyeccion, no la realidad.")
 
 # ---------------------------------------------------------------------------
 # Pronostico futuro
@@ -106,16 +115,18 @@ with col_t:
             superior=futuro["superior"].round(0).astype(int),
         ),
         width='stretch', hide_index=True)
-    st.caption("El intervalo es aproximado: ±1.96 · desviacion de los residuos del "
-               "suavizado exponencial, no un intervalo de prediccion exacto.")
+    st.caption("El modelo se ajusta en escala logaritmica, asi que el intervalo es "
+               "asimetrico: un conteo no puede bajar de cero y tiene mas recorrido "
+               "hacia arriba. Es aproximado (±1.96 · desviacion de los residuos), "
+               "no un intervalo de prediccion exacto.")
 
 with col_r:
     ui.section("Robustez ante la ventana de evaluacion",
                "Que modelo gana cambia segun cuantas semanas se reserven para prueba. "
                "Se muestran todas para no elegir la que favorezca un resultado.")
-    st.dataframe(forecasting.tabla_robustez(serie), width='stretch', hide_index=True)
+    st.dataframe(forecasting.tabla_robustez(serie_eval), width='stretch', hide_index=True)
     ui.callout(
-        "Con ventanas cortas la <b>media movil</b> puede ganar por construccion: "
+        "Con ventanas muy cortas la <b>media movil</b> puede ganar por construccion: "
         "pronostica una constante y en pocas semanas eso se parece al promedio real. "
         "Un componente estacional de 52 semanas necesita una ventana mas larga "
         "para mostrar su valor.")

@@ -133,8 +133,12 @@ def entrenar_clasificacion(df: pd.DataFrame):
 
 def entrenar_pronostico(df: pd.DataFrame):
     print("\n=== PRONOSTICO (serie nacional) ===")
+    print("   (metricas medidas solo con notificaciones observadas)")
+    # Evaluar sobre la serie extendida mediria que tan bien el modelo reproduce
+    # nuestra propia proyeccion, no la realidad.
+    serie_eval = forecasting.serie_para_evaluar(df, nivel="nacional")
     serie = forecasting.build_series(df, nivel="nacional")
-    ev = forecasting.evaluate_models(serie)
+    ev = forecasting.evaluate_models(serie_eval)
     filas = []
     for modelo, m in ev["resultados"].items():
         filas.append({"modelo": modelo, "mape": round(m["mape"], 3), "rmse": round(m["rmse"], 3)})

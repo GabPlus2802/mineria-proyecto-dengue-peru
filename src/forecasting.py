@@ -109,22 +109,39 @@ def moving_average_forecast(train: pd.Series, steps: int, window: int | None = N
 
 
 def _fit_holt_winters(train: pd.Series):
+    """Ajusta Holt-Winters en escala logaritmica con tendencia amortiguada.
+
+    Dos decisiones que importan en una serie epidemica:
+
+    - **Escala log.** Los brotes crecen de forma multiplicativa: pasar de 100 a
+      200 casos es el mismo fenomeno que pasar de 1000 a 2000, no un salto diez
+      veces mayor. Modelar log(1+casos) estabiliza la varianza y evita que los
+      picos de 2023-2024 dominen el ajuste de los 20 anios previos.
+    - **Tendencia amortiguada.** Sin amortiguar, la tendencia se extrapola
+      indefinidamente y tras un pico el modelo proyecta una caida (o una subida)
+      sin freno. Amortiguarla hace que se aplane con el horizonte, que es como
+      se comportan las curvas epidemicas reales.
+
+    Ambas mejoran el error en el periodo de prueba con datos reales.
+    """
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
     # El calendario epidemiologico no es una frecuencia regular de pandas
     # (cada anio arranca en un dia distinto). Se ajusta sobre los valores, que
-    # sí estan igualmente espaciados en semanas.
-    train = pd.Series(np.asarray(train, dtype=float)).reset_index(drop=True)
+    # si estan igualmente espaciados en semanas.
+    y = np.log1p(np.clip(np.asarray(train, dtype=float), 0, None))
+    y = pd.Series(y).reset_index(drop=True)
 
-    usar_estacional = len(train) >= 2 * 52
+    usar_estacional = len(y) >= 2 * 52
     if usar_estacional:
         modelo = ExponentialSmoothing(
-            train, trend="add", seasonal="add", seasonal_periods=52,
+            y, trend="add", damped_trend=True, seasonal="add", seasonal_periods=52,
             initialization_method="estimated",
         )
     else:
         modelo = ExponentialSmoothing(
-            train, trend="add", seasonal=None, initialization_method="estimated"
+            y, trend="add", damped_trend=True, seasonal=None,
+            initialization_method="estimated",
         )
     return modelo.fit(), usar_estacional
 
@@ -132,14 +149,19 @@ def _fit_holt_winters(train: pd.Series):
 def holt_winters_forecast(train: pd.Series, steps: int):
     """Suavizado exponencial. Devuelve (pronostico, intervalo aproximado).
 
-    El intervalo se aproxima con +-1.96 * desviacion de los residuos (Holt-Winters
-    de statsmodels no expone intervalos analiticos directos)."""
+    El ajuste ocurre en escala log; el intervalo se construye ahi (+-1.96 veces
+    la desviacion de los residuos) y se devuelve a la escala de casos. Por eso el
+    intervalo resulta asimetrico, que es lo correcto para un conteo: no puede
+    bajar de cero y tiene mas recorrido hacia arriba.
+    """
     fit, _ = _fit_holt_winters(train)
-    pred = np.asarray(fit.forecast(steps), dtype=float)
+    pred_log = np.asarray(fit.forecast(steps), dtype=float)
     resid_std = float(np.nanstd(fit.resid)) if hasattr(fit, "resid") else 0.0
     margen = 1.96 * resid_std
-    lower = np.clip(pred - margen, 0, None)
-    upper = pred + margen
+
+    pred = np.clip(np.expm1(pred_log), 0, None)
+    lower = np.clip(np.expm1(pred_log - margen), 0, None)
+    upper = np.clip(np.expm1(pred_log + margen), 0, None)
     return pred, (lower, upper)
 
 
@@ -174,6 +196,20 @@ def evaluate_models(serie: pd.Series, test_periods: int | None = None) -> dict:
         "test": test,
         "pred_test": {"media_movil": ma_pred, "holt_winters": hw_pred},
     }
+
+
+def serie_para_evaluar(df: pd.DataFrame, nivel: str = "nacional",
+                       clave: str | None = None) -> pd.Series:
+    """Serie recortada a las notificaciones observadas.
+
+    Las metricas del pronostico DEBEN medirse aqui. Si se evaluaran sobre la
+    serie extendida, la ventana de prueba caeria dentro del tramo proyectado y
+    el resultado mediria que tan bien el modelo reproduce la propia proyeccion,
+    no la realidad.
+    """
+    if "origen" in df.columns:
+        df = df[df["origen"] == "real"]
+    return build_series(df, nivel=nivel, clave=clave)
 
 
 def tabla_robustez(serie: pd.Series, ventanas: list[int] | None = None) -> pd.DataFrame:

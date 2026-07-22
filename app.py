@@ -23,7 +23,7 @@ paginas = [
     st.Page("views/eda_clustering.py", title="EDA & Clustering", icon="📊"),
     st.Page("views/modelo_predictivo.py", title="Modelo Predictivo", icon="🤖"),
     st.Page("views/pronostico.py", title="Pronostico", icon="📈"),
-    st.Page("views/crud.py", title="Datos (CRUD)", icon="🗂️"),
+    st.Page("views/crud.py", title="Gestion de datos", icon="🗂️"),
 ]
 
 st.navigation(paginas, position="top").run()

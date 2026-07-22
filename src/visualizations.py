@@ -115,7 +115,8 @@ def histograma(df: pd.DataFrame, col: str, titulo: str | None = None) -> go.Figu
                        color_discrete_sequence=[AZUL],
                        title=titulo or f"Distribucion de {col}")
     # 2px de separacion entre barras adyacentes: los rellenos no se tocan
-    fig.update_layout(bargap=0.08)
+    fig.update_layout(bargap=0.08, height=420,
+                      xaxis_title=col, yaxis_title="Frecuencia")
     fig.update_traces(marker_line_width=0)
     return fig
 
@@ -125,6 +126,7 @@ def boxplot(df: pd.DataFrame, col: str, titulo: str | None = None) -> go.Figure:
                  color_discrete_sequence=[AZUL],
                  title=titulo or f"Boxplot de {col}")
     fig.update_traces(marker=dict(size=5, opacity=0.55), line=dict(width=2))
+    fig.update_layout(height=420, yaxis_title=col)
     return fig
 
 
@@ -132,9 +134,12 @@ def matriz_correlacion(df: pd.DataFrame, cols: list[str]) -> go.Figure:
     corr = df[cols].corr(numeric_only=True)
     # Divergente: dos polos + gris neutro al centro (0 = sin relacion)
     escala = [[0.0, POLO_BAJA], [0.5, NEUTRO], [1.0, POLO_ALTA]]
-    fig = px.imshow(corr, text_auto=".2f", aspect="auto", color_continuous_scale=escala,
+    fig = px.imshow(corr, aspect="auto", color_continuous_scale=escala,
                     zmin=-1, zmax=1, template=PLANTILLA, title="Matriz de correlacion")
-    fig.update_traces(textfont=dict(size=10, color=TINTA), xgap=2, ygap=2)
+    fig.update_traces(texttemplate="<b>%{z:.2f}</b>", xgap=2, ygap=2,
+                      textfont=dict(size=11, color=TINTA),
+                      hovertemplate="%{y} vs %{x}<br>correlacion: %{z:.3f}<extra></extra>")
+    fig.update_layout(height=560)
     return fig
 
 
@@ -174,31 +179,67 @@ def evolucion_temporal(serie: pd.Series, titulo="Evolucion temporal de casos",
 
 def barras_por_categoria(df: pd.DataFrame, cat: str, valor: str, top: int = 15,
                          titulo: str | None = None) -> go.Figure:
-    agg = df.groupby(cat)[valor].sum().sort_values(ascending=False).head(top).reset_index()
-    fig = px.bar(agg, x=cat, y=valor, template=PLANTILLA,
+    """Ranking horizontal.
+
+    Horizontal y no vertical: con 15 nombres de distrito o departamento, las
+    etiquetas verticales se recortan o se solapan. En horizontal cada nombre
+    tiene su propia linea y el valor va como etiqueta directa al final de la barra.
+    """
+    agg = (df.groupby(cat)[valor].sum().sort_values(ascending=False)
+           .head(top).reset_index().sort_values(valor))
+    fig = px.bar(agg, x=valor, y=cat, orientation="h", template=PLANTILLA,
                  color_discrete_sequence=[AZUL],
-                 title=titulo or f"{valor} por {cat} (top {top})")
+                 title=titulo or f"{valor} por {cat} (top {top})",
+                 text=agg[valor].map(lambda v: f"{int(v):,}"))
     # Extremo redondeado de 4px anclado a la linea base
-    fig.update_traces(marker_line_width=0, marker=dict(cornerradius=4))
-    fig.update_layout(xaxis_tickangle=-45, bargap=0.28)
+    fig.update_traces(marker_line_width=0, marker=dict(cornerradius=4),
+                      textposition="outside", cliponaxis=False,
+                      textfont=dict(size=11, color=TINTA_2),
+                      hovertemplate="%{y}<br>%{x:,.0f} casos<extra></extra>")
+    fig.update_layout(height=max(420, 30 * len(agg) + 110), bargap=0.3,
+                      yaxis_title="", xaxis_title=valor.capitalize(),
+                      margin=dict(l=10, r=80, t=52, b=44))
     return fig
 
 
 # ---------------------------------------------------------------------------
 # Clustering
 # ---------------------------------------------------------------------------
-def scatter_clusters(perfil: pd.DataFrame) -> go.Figure:
+def scatter_clusters(perfil: pd.DataFrame, nombres: dict | None = None,
+                     colores: dict | None = None) -> go.Figure:
+    """Mapa PCA de los distritos coloreado por grupo.
+
+    'nombres' mapea el numero de cluster a su nombre epidemiologico, para que la
+    leyenda diga que significa cada grupo y no "Cluster 0".
+    'colores' mapea el numero de cluster a su color, para que coincida con el de
+    las tarjetas de la seccion anterior.
+    """
     d = perfil.reset_index()
-    d["cluster"] = "Cluster " + d["cluster"].astype(str)
+    d["grupo"] = d["cluster"].map(nombres) if nombres else \
+        "Grupo " + d["cluster"].astype(str)
+    orden = ([nombres[c] for c in sorted(nombres)] if nombres
+             else sorted(d["grupo"].unique()))
+    mapa_color = ({nombres[c]: colores[c] for c in nombres} if nombres and colores
+                  else None)
+
     fig = px.scatter(
-        d, x="pca_1", y="pca_2", color="cluster",
-        hover_data=["distrito", "departamento", "promedio_semanal", "maximo_semanal"],
-        template=PLANTILLA, color_discrete_sequence=SERIE,
-        title="Clusters de distritos (proyeccion PCA 2D)",
+        d, x="pca_1", y="pca_2", color="grupo",
+        category_orders={"grupo": orden},
+        color_discrete_map=mapa_color,
+        color_discrete_sequence=None if mapa_color else SERIE,
+        hover_data={"distrito": True, "departamento": True,
+                    "promedio_semanal": ":.2f", "maximo_semanal": ":.0f",
+                    "pca_1": False, "pca_2": False},
+        template=PLANTILLA,
+        title="Mapa de distritos segun su comportamiento (proyeccion PCA 2D)",
+        labels={"pca_1": "Componente principal 1", "pca_2": "Componente principal 2"},
     )
     # Anillo de 2px del color de la superficie: los puntos superpuestos se separan
     fig.update_traces(marker=dict(size=9, opacity=0.9,
                                   line=dict(width=2, color=SUPERFICIE)))
+    fig.update_layout(height=520, legend=dict(title="", orientation="h",
+                                              yanchor="bottom", y=1.01,
+                                              xanchor="left", x=0))
     return fig
 
 

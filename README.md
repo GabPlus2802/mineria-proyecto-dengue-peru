@@ -122,8 +122,12 @@ semana, diagnostic, diresa, ubigeo, localcod, edad, tipo_edad, sexo`.
 - **Pronóstico:** media móvil (baseline) vs Holt-Winters, MAPE seguro y RMSE,
   proyección de 4–26 semanas con intervalo y **tabla de robustez** ante la ventana
   de evaluación.
-- **Datos (CRUD):** registrar, listar, editar y eliminar consultas con
-  persistencia en Supabase (o SQLite local).
+- **Gestión de datos (CRUD):** las cuatro operaciones sobre **dos tablas**. Los
+  *registros de vigilancia* (distrito × semana) se importan del dataset y desde ahí
+  se consultan, editan, añaden y eliminan; las *consultas al modelo* guardan cada
+  predicción con su escenario de entrada. Persistencia en Supabase o base local.
+  El CSV maestro nunca se modifica: es la fuente de origen y debe quedar intacta
+  para que los modelos sigan siendo reproducibles.
 
 ### Diseño
 
@@ -234,7 +238,7 @@ streamlit run app.py
 | Clustering | K-means (`k` por codo + silueta, PCA 2D) |
 | Clasificación | **5 modelos**: Random Forest, XGBoost, Gradient Boosting, Regresión Logística y Árbol de Decisión (con balanceo de clases) |
 | Explicabilidad | SHAP: `TreeExplainer` en los modelos de árbol y `LinearExplainer` en la Regresión Logística, de modo que **el mejor modelo por F1 también queda explicado** |
-| Pronóstico | Media móvil (baseline) y Holt-Winters (suavizado exponencial) |
+| Pronóstico | Media móvil (baseline) y Holt-Winters en **escala logarítmica con tendencia amortiguada** |
 | Simulación de datos | Bootstrap estacional por distrito con recencia, factor de intensidad anual y persistencia AR(1) |
 
 ## 12. Métricas (ejecución real)
@@ -258,33 +262,65 @@ simulada está excluida). Ordenado por F1:
 0.618 a 0.923 y XGBoost de 0.636 a 0.914 al aplicar `class_weight` /
 `scale_pos_weight`.
 
-**Pronóstico** (serie nacional). Qué modelo gana **depende de la ventana de
-evaluación**, así que se publica la tabla completa en lugar de una sola cifra:
+**Pronóstico** (serie nacional). Las métricas se miden **solo sobre
+notificaciones observadas**: evaluarlas sobre el tramo proyectado mediría qué tan
+bien el modelo reproduce nuestra propia proyección, no la realidad.
 
 | Ventana de prueba | MAPE media móvil | RMSE media móvil | MAPE Holt-Winters | RMSE Holt-Winters | Elegido |
 |---|---|---|---|---|---|
-| 8 semanas | 19.6 % | 1 730.9 | 96.3 % | 8 400.1 | media móvil |
-| **13 semanas (por defecto)** | 43.0 % | 4 205.4 | **26.6 %** | **2 597.2** | **Holt-Winters** |
-| 26 semanas | 65.0 % | 5 706.7 | 58.4 % | 5 296.6 | Holt-Winters |
+| 8 semanas | 44.9 % | 459.0 | **21.4 %** | **257.5** | Holt-Winters |
+| **13 semanas (por defecto)** | 42.4 % | 464.3 | **27.2 %** | **312.6** | **Holt-Winters** |
+| 26 semanas | 232.1 % | 1 243.7 | **58.5 %** | **421.2** | Holt-Winters |
 
-> La ventana por defecto es de **13 semanas (un trimestre epidemiológico)**. Con 8
-> semanas o menos la media móvil gana por construcción: pronostica una constante y
-> en tan pocas semanas eso se parece al promedio real, mientras que un componente
-> estacional de 52 semanas no alcanza a expresarse. El Panel 3 muestra esta tabla
-> y permite mover la ventana en vivo.
+> Holt-Winters gana en **todas** las ventanas, así que el resultado no depende de
+> esa elección. Dos decisiones lo explican:
+>
+> - **Escala logarítmica.** Los brotes crecen de forma multiplicativa: pasar de 100
+>   a 200 casos es el mismo fenómeno que pasar de 1 000 a 2 000. Modelar
+>   `log(1+casos)` estabiliza la varianza y evita que el pico de 2023–2024 domine
+>   el ajuste de los 20 años previos. Como efecto secundario, el intervalo sale
+>   **asimétrico**, que es lo correcto para un conteo: no baja de cero y tiene más
+>   recorrido hacia arriba.
+> - **Tendencia amortiguada.** Sin amortiguar, tras un pico el modelo extrapola la
+>   caída indefinidamente. Amortiguada se aplana con el horizonte, como las curvas
+>   epidémicas reales.
+>
+> Con la versión aditiva anterior el ganador cambiaba según la ventana (MAPE de
+> 96 % a 8 semanas). El Panel 3 publica esta tabla y permite mover la ventana en vivo.
+>
+> **Descartado:** un *naive estacional* (repetir lo ocurrido 52 semanas antes)
+> parecía excelente sobre la serie extendida (MAPE ≈ 16 %) pero da **103 %** sobre
+> datos reales. Su buen resultado era circular: la proyección se construye
+> muestreando la misma semana de años anteriores, así que ese baseline estaba
+> reproduciendo el propio generador.
 
-**Clustering:** k = 3, silueta ≈ 0.353, PCA 2D explica 68.8 % de la varianza.
+**Clustering:** k = 3, **silueta ≈ 0.569**, PCA 2D explica **89.7 %** de la varianza.
 
 | Perfil | Distritos | Casos/semana | Pico histórico | Semanas activas | % casos del país |
 |---|---|---|---|---|---|
-| Transmisión esporádica | 342 | 0.5 | 32 | 9 % | 14.1 % |
-| Transmisión estacional | 195 | 3.4 | 96 | 34 % | 39.8 % |
-| Transmisión alta y sostenida | 34 | 16.0 | 663 | 50 % | 46.1 % |
+| Transmisión esporádica | 437 | 0.7 | 30 | 13 % | 22.0 % |
+| Transmisión estacional | 111 | 6.0 | 197 | 38 % | 40.9 % |
+| Transmisión alta y sostenida | 23 | 18.1 | 749 | 60 % | 37.1 % |
 
-> El hallazgo accionable: **34 distritos (6 % del país) concentran el 46 % de
+> El hallazgo accionable: **23 distritos (4 % del país) concentran el 37 % de
 > todos los casos notificados**. Ahí rinde más cada sol invertido en control del
 > vector; los grupos de menor intensidad necesitan vigilancia para detectar un
 > brote inusual, no inversión permanente.
+
+**Cómo subió la silueta de 0.353 a 0.569.** K-means agrupa con 5 de las 8 variables
+del perfil. Las otras tres se calculan y se muestran, pero no agrupan, por razones
+metodológicas, no por conveniencia:
+
+| Variable excluida | Motivo |
+|---|---|
+| `semana_pico` | Es **circular**: la semana 52 y la 1 son vecinas, pero en una distancia euclídea quedan a 51 de separación. Tratarla como lineal inyecta ruido. |
+| `pct_semanas_alta` | Se deriva de la **variable objetivo** de la clasificación. Usarla aquí mezcla una etiqueta supervisada, construida para otro problema, dentro de un análisis no supervisado. |
+| `crecimiento_promedio` | Es un promedio de razones semana a semana; en distritos con pocos casos lo domina el ruido y no informa del nivel de transmisión. |
+
+> Nota de honestidad: existen subconjuntos de 3 variables que alcanzan silueta
+> **0.83**, pero producen grupos degenerados (531 / 15 / 25 distritos) que no
+> sirven para decidir nada. Una silueta alta con clusters degenerados es peor
+> resultado que una silueta moderada con grupos interpretables.
 
 > Los valores exactos se regeneran con `python train.py` y quedan en
 > `data/processed/metricas_*.csv`. Deben coincidir con lo mostrado en el dashboard.
@@ -322,7 +358,8 @@ cambiarlos, reentrenar con `python train.py` y revisar el resultado indicado.
 | Periodo de prueba | `TEST_YEARS`, `VALIDATION_YEARS` | Años de val/test | Split temporal |
 | Ventana de media móvil | `MOVING_AVERAGE_WINDOW` | Suavizado del baseline | Panel 3 (MAPE/RMSE) |
 | Periodos de pronóstico | `FORECAST_PERIODS` | Semanas proyectadas | Panel 3 |
-| Ventana de evaluación | `FORECAST_EVAL_PERIODS` | Qué modelo de pronóstico gana | Panel 3 (tabla de robustez) |
+| Ventana de evaluación | `FORECAST_EVAL_PERIODS` | Semanas reservadas para medir | Panel 3 (tabla de robustez) |
+| Variables del clustering | `CLUSTER_COLS` (`src/clustering.py`) | Qué define a cada grupo y la silueta | Panel 1 (tarjetas, silueta) |
 | Horizonte simulado | `SIM_END_ANO`, `SIM_END_SEMANA` | Hasta cuándo llega el dataset | Todos los paneles |
 | Intensidad simulada | `SIM_INTENSIDAD` | Magnitud del brote 2025/2026 | Panel 3 (nivel de la serie) |
 | Persistencia simulada | `SIM_PERSISTENCIA` | Suavidad de la curva generada | Panel 1 (evolución temporal) |
@@ -337,7 +374,7 @@ cambió el preprocesamiento o el dataset original).
 pytest -q
 ```
 
-**30 pruebas** que verifican:
+**40 pruebas** que verifican:
 
 - *Preprocesamiento:* el dataset original no se modifica, la fecha semanal es
   válida y única, los lags/medias móviles no usan futuro, el objetivo no está
@@ -351,6 +388,10 @@ pytest -q
   serie no pierde semanas en años que no empiezan en lunes (regresión: el
   `asfreq("W-MON")` anterior anulaba 2025 y 2026) y el pronóstico arranca después
   del último dato con intervalos coherentes.
+- *CRUD:* create/read/update/delete sobre ambas tablas, inserción masiva, que un
+  update no toque los demás registros, que las columnas inexistentes se ignoren en
+  vez de romper la inserción, y que el escenario del simulador sobreviva el
+  viaje a JSON y vuelva como diccionario.
 
 ## 16. Integrantes
 

@@ -93,16 +93,19 @@ with tab2:
     st.dataframe(f["casos"].describe().to_frame().T, width='stretch')
 
 with tab3:
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2, gap="medium")
     with col1:
-        st.plotly_chart(viz.barras_por_categoria(f, "departamento", "casos", top=15),
-                        width='stretch')
+        st.plotly_chart(
+            viz.barras_por_categoria(f, "departamento", "casos", top=15,
+                                     titulo="Casos por departamento (top 15)"),
+            width='stretch')
     with col2:
-        top_dist = (f.groupby("distrito")["casos"].sum().sort_values(ascending=False)
-                    .head(15).reset_index())
-        st.plotly_chart(px.bar(top_dist, x="distrito", y="casos",
-                        template=viz.PLANTILLA, title="Casos por distrito (top 15)")
-                        .update_layout(xaxis_tickangle=-45), width='stretch')
+        st.plotly_chart(
+            viz.barras_por_categoria(f, "distrito", "casos", top=15,
+                                     titulo="Casos por distrito (top 15)"),
+            width='stretch')
+    st.caption("Barras horizontales para que los 15 nombres quepan completos y el "
+               "total de cada uno se lea junto a su barra.")
 
 with tab4:
     cols_corr = ["casos", "casos_lag_1", "casos_lag_4", "promedio_movil_4",
@@ -191,7 +194,7 @@ def _evaluacion_k():
     from sklearn.preprocessing import StandardScaler
 
     perfil = clustering.district_profile(loaders.solo_real(df))
-    X = StandardScaler().fit_transform(perfil[clustering.PERFIL_COLS].values)
+    X = StandardScaler().fit_transform(perfil[clustering.CLUSTER_COLS].values)
     return clustering.evaluar_k(X)
 
 
@@ -211,6 +214,10 @@ etiquetas = clustering.etiquetar_clusters(perfil_clusters)
 aporte = clustering.aporte_de_casos(loaders.solo_real(df), perfil_clusters)
 # Del mas leve al mas intenso: azul, ambar, rojo
 ACENTOS = [viz.SERIE[0], viz.SERIE[3], viz.SERIE[7], viz.SERIE[6]]
+# Mismo nombre y mismo color en las tarjetas y en el mapa PCA
+NOMBRE_DE = dict(zip(etiquetas["cluster"], etiquetas["nombre"]))
+COLOR_DE = {c: ACENTOS[int(n) % len(ACENTOS)]
+            for c, n in zip(etiquetas["cluster"], etiquetas["nivel"])}
 
 cols = st.columns(len(etiquetas), gap="medium")
 for col, (_, fila) in zip(cols, etiquetas.iterrows()):
@@ -266,11 +273,14 @@ categorias naturales con lineas nitidas.
 # --- Mapa PCA ------------------------------------------------------------
 ui.section("Mapa de los distritos", tag="proyeccion PCA 2D")
 st.markdown(
-    "Los 8 indicadores se comprimen a 2 dimensiones para poder dibujarlos. Cada "
-    "punto es un distrito y la cercania indica comportamiento parecido. Los ejes "
-    "no tienen unidades interpretables: solo importa **quien queda cerca de quien**."
+    f"Las {len(clustering.CLUSTER_COLS)} variables se comprimen a 2 dimensiones para "
+    "poder dibujarlas. Cada punto es un distrito y la cercania indica comportamiento "
+    "parecido; al pasar el cursor se ve cual es. Los ejes no tienen unidades "
+    "interpretables: solo importa **quien queda cerca de quien**. La leyenda usa los "
+    "mismos nombres y colores que las tarjetas de arriba."
 )
-st.plotly_chart(viz.scatter_clusters(perfil_clusters), width='stretch')
+st.plotly_chart(viz.scatter_clusters(perfil_clusters, NOMBRE_DE, COLOR_DE),
+                width='stretch')
 
 with st.expander("Ver la tabla numerica completa por grupo"):
     st.dataframe(clustering.resumen_clusters(perfil_clusters), width='stretch')

@@ -12,7 +12,7 @@ ui.hero(
     "Tablero analitico sobre la vigilancia epidemiologica del dengue del MINSA. "
     "Explora 25 anios de datos, agrupa distritos por su comportamiento, clasifica "
     "el riesgo de la semana siguiente y proyecta los proximos periodos.",
-    badges=["Mineria de Datos", "MINSA 2000-2024", "Distrito x semana",
+    badges=["Mineria de Datos", "Serie hasta mayo 2026", "Distrito x semana",
             "5 modelos + SHAP", "Streamlit"],
 )
 
@@ -79,9 +79,9 @@ de analisis **distrito x semana epidemiologica**, y sobre ella **explora**,
             st.caption("Simulador con sliders: mueve cada variable y observa el riesgo "
                        "y su explicacion SHAP al instante. Compara 5 modelos.")
         with st.container(border=True):
-            st.markdown("#### 🗂️ Datos (CRUD)")
-            st.caption("Registrar, listar, editar y eliminar consultas con "
-                       "persistencia en Supabase o SQLite local.")
+            st.markdown("#### 🗂️ Gestion de datos")
+            st.caption("CRUD completo sobre los registros de vigilancia y sobre "
+                       "las consultas al modelo, con persistencia.")
     st.caption("Navega con las pestanas de la parte superior.")
 
     ui.section("Como se define el objetivo")
