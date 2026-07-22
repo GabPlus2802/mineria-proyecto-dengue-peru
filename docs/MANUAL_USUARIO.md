@@ -34,9 +34,17 @@ pip install -r requirements.txt
 ### Paso 4 (opcional): Regenerar modelos
 El repositorio ya incluye los modelos entrenados. Solo si quieres recrearlos:
 ```powershell
-python train.py            # usa el dataset procesado existente
-python train.py --rebuild  # reconstruye TODO desde el CSV crudo (data/raw/)
+python train.py                   # usa el dataset procesado existente
+python train.py --rebuild         # reconstruye TODO desde el CSV crudo (data/raw/)
+python train.py --sin-simulacion  # solo datos reales, sin la extensión 2025-2026
 ```
+
+> ⚠️ **Importante — datos simulados.** Los datos reales del MINSA llegan hasta 2024.
+> Para que el pronóstico muestre fechas vigentes, el sistema añade registros de
+> enero 2025 a mayo 2026 **generados por simulación**. El dashboard lo advierte con
+> un aviso ámbar en cada panel afectado y el tramo simulado aparece punteado en los
+> gráficos. **Esos registros no entrenan ni evalúan ningún modelo:** todas las
+> métricas de clasificación y el clustering usan únicamente datos reales.
 
 ### Paso 5: Ejecutar el dashboard
 ```powershell
@@ -79,24 +87,41 @@ el estado de los modelos (✅/❌). En la **barra lateral izquierda** se elige e
 
 **Para qué sirve:** comparar modelos, entender qué influye y hacer una predicción.
 
-1. **Umbral de decisión:** mueve el deslizador para ver cómo cambian las métricas.
-2. **Tabla de comparación:** Random Forest vs XGBoost (accuracy, precision, recall,
-   F1, ROC-AUC, TP/TN/FP/FN). Debajo se indica el **mejor modelo** por F1.
-3. **Matriz de confusión** y **curva de umbral** (precision/recall/F1).
-4. **SHAP:**
-   - *Explicación global:* qué variables pesan más en general.
-   - *Explicación local:* elige un índice para ver por qué se predijo un caso.
-5. **Predicción en vivo:**
-   1. Elige **Departamento** y **Distrito**.
-   2. Ajusta (o deja los valores por defecto) los **casos de la semana actual** y la
-      **semana epidemiológica**.
-   3. Elige el **modelo** y pulsa **Predecir**.
-   4. Verás la **clase predicha** (ALTA / Baja incidencia), la **probabilidad**, el
-      **modelo usado** y una **explicación SHAP** de esa predicción.
-   5. La predicción queda guardada en memoria para registrarla en el Panel 4.
+El panel tiene tres pestañas.
 
-> 💡 No necesitas calcular variables técnicas (lags, medias móviles): el sistema las
-> calcula solo a partir del historial del distrito.
+#### 🎛️ Simulador de predicción (la principal)
+
+1. Elige **Departamento**, **Distrito**, **Modelo** y el **umbral de decisión**.
+2. Los sliders se precargan con los **valores reales de la última semana** de ese
+   distrito. Cada uno tiene un **−** a la izquierda y un **+** a la derecha:
+   - Casos de esta semana y de hace 1, 2 y 4 semanas
+   - Promedio de las 4 y de las 8 semanas previas
+   - Variabilidad de las 4 semanas previas
+   - Crecimiento respecto a la semana previa
+   - Semana epidemiológica (de ella se derivan `semana_sen` y `semana_cos`)
+3. **Todo se recalcula al instante** al mover cualquier slider: el medidor de
+   probabilidad, el estado (RIESGO ALTO / BAJO) y la explicación SHAP.
+4. Dos botones te ayudan:
+   - **↺ Volver a los valores reales** — deshace tus cambios.
+   - **⚙️ Sincronizar derivadas** — recalcula promedios, variabilidad y crecimiento
+     a partir de los lags que pusiste, para que el escenario sea coherente.
+5. En **Por qué esta predicción** verás qué variable empujó el resultado: rojo hacia
+   ALTA incidencia, azul hacia baja, con el valor numérico en cada barra.
+6. El escenario queda guardado para registrarlo en **Datos (CRUD)**.
+
+#### 🏁 Comparación de modelos
+
+Tabla de los 5 modelos (accuracy, precision, recall, F1, ROC-AUC, TP/TN/FP/FN),
+matriz de confusión, curva de umbral, métricas por clase y efecto del balanceo.
+
+#### 🔍 Explicabilidad global
+
+Qué variables pesan más en el conjunto de prueba completo, con *summary plot* e
+importancia media.
+
+> 💡 Puedes mover libremente cada variable para responder preguntas del tipo *"¿y si
+> los casos se duplicaran esta semana?"*. Si quieres volver a un escenario realista,
+> usa **Sincronizar derivadas** o **Volver a los valores reales**.
 
 ---
 
@@ -108,20 +133,24 @@ el estado de los modelos (✅/❌). En la **barra lateral izquierda** se elige e
    - *Nacional* (recomendado, serie más estable),
    - *Departamento* (elige cuál),
    - *Distrito* (elige departamento y distrito con suficiente historia).
-2. Ajusta los **periodos futuros a pronosticar** (4 a 12).
+2. Ajusta las **semanas futuras a pronosticar** (4 a 26) y las **semanas
+   reservadas para evaluar** (8 a 26).
 3. Verás:
    - Tarjetas con **MAPE** y **RMSE** de la media móvil y de Holt-Winters.
    - El **modelo elegido** (menor RMSE).
    - Un **gráfico** con histórico, valores reales, estimados, pronóstico futuro y su
-     intervalo.
-   - Una **tabla** con el pronóstico y su intervalo.
+     intervalo. Una línea vertical marca **dónde terminan los datos reales**.
+   - Una **tabla** con el pronóstico semana a semana.
+   - Una **tabla de robustez**: qué modelo gana con distintas ventanas de
+     evaluación. Con ventanas cortas la media móvil puede ganar por construcción,
+     porque pronostica una constante.
 
 > ⚠️ Si eliges un distrito con poca historia, el sistema te pedirá usar un nivel más
 > agregado.
 
 ---
 
-### Panel 4 — 🗂️ CRUD de consultas
+### 🗂️ Datos (CRUD)
 
 **Para qué sirve:** guardar, revisar, editar y borrar consultas/predicciones.
 

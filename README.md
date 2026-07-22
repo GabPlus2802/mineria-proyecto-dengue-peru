@@ -8,6 +8,11 @@ explica las predicciones con SHAP y pronostica los próximos periodos.
 > ⚠️ **Uso académico.** Las etiquetas de "alta incidencia" son estadísticas
 > (percentil histórico por distrito), no una definición epidemiológica oficial de
 > brote. Las explicaciones SHAP muestran asociación, no causalidad.
+>
+> ⚠️ **Datos 2025–2026 simulados.** La vigilancia real del MINSA llega hasta 2024;
+> el periodo posterior se genera por bootstrap estacional para que el pronóstico
+> muestre fechas vigentes. Está marcado como tal y **no interviene en el
+> entrenamiento ni en ninguna métrica de modelo**. Ver [§3.1](#31-extensión-simulada-del-dataset-2025--mayo-2026).
 
 ---
 
@@ -28,9 +33,37 @@ anticipación de la actividad del dengue a nivel distrital.
 
 ## 3. Periodo y unidad de análisis
 
-- **Periodo:** 2000–2024 (semanas epidemiológicas 1–53).
+- **Periodo real (MINSA):** 2000–2024 (semanas epidemiológicas 1–53).
+- **Extensión simulada:** enero 2025 – mayo 2026 (ver §3.1). **No son datos reales.**
 - **Granularidad original:** caso individual notificado (1 fila = 1 caso).
 - **Unidad de análisis:** **distrito × semana epidemiológica**.
+
+### 3.1 Extensión simulada del dataset (2025 – mayo 2026)
+
+La vigilancia publicada por el MINSA termina en 2024. Para que el pronóstico se
+muestre en fechas vigentes, el dataset maestro se extiende con **40 922 registros
+generados** (553 distritos, hasta el 28/05/2026) mediante **bootstrap estacional
+por distrito** ([`src/simulation.py`](src/simulation.py)):
+
+1. Para cada distrito y cada semana objetivo `w`, se toman sus casos históricos en
+   las semanas `[w−2, w+2]` (ventana circular) de los últimos 6 años.
+2. Se muestrea un valor ponderando por recencia (`peso = 0.65^antigüedad`).
+3. Se aplica un factor de intensidad anual (2025: 0.80, 2026: 0.90), que refleja
+   el descenso posterior al pico epidémico de 2023–2024.
+4. El nivel muestreado se **suaviza** (ventana 3) y se multiplica por una
+   **intensidad persistente AR(1)** (ρ = 0.75): la intensidad de un brote real
+   persiste varias semanas, un ruido independiente por semana no lo representa.
+
+> ⚠️ **Estas filas NO son datos reales.** Llevan `origen = "simulado"` y
+> `split = "simulado"`, por lo que quedan **excluidas del entrenamiento, de todas
+> las métricas de clasificación y del clustering**. Solo alimentan la exploración
+> temporal y el pronóstico. El dashboard lo advierte de forma permanente en cada
+> panel afectado.
+>
+> Para reconstruir el proyecto **solo con datos reales**: `python train.py --sin-simulacion`.
+
+Todos los parámetros de la simulación son editables en [`config.py`](config.py)
+(`SIM_*`).
 
 ---
 
@@ -70,22 +103,36 @@ semana, diagnostic, diresa, ubigeo, localcod, edad, tipo_edad, sexo`.
 
 ## 4. Funcionalidades
 
-- **Panel 1 — EDA y Clustering:** estadísticas, histogramas, boxplots, correlación,
-  evolución temporal, casos por departamento/distrito, outliers (1.5·IQR) y
-  agrupamiento K-means (codo + silueta + PCA 2D).
-- **Panel 2 — Modelo Predictivo:** Random Forest vs XGBoost, métricas completas,
-  matriz de confusión, barrido de umbral, SHAP global y local, y formulario de
-  predicción en vivo.
-- **Panel 3 — Pronóstico:** media móvil (baseline) vs Holt-Winters, MAPE seguro y
-  RMSE, proyección de 4+ semanas con intervalo.
-- **Panel 4 — CRUD:** registrar, listar, editar y eliminar consultas con
-  persistencia en Supabase (o SQLite local en desarrollo).
+- **Acerca de:** presentación del proyecto, fuente de datos, definición del
+  objetivo, estado de los modelos, equipo y advertencias metodológicas.
+- **EDA y Clustering:** estadísticas, histogramas, boxplots, correlación,
+  evolución temporal (con el tramo simulado diferenciado), casos por
+  departamento/distrito, outliers (1.5·IQR) y agrupamiento K-means
+  (codo + silueta + PCA 2D).
+- **Modelo Predictivo:** **simulador con sliders** — se mueve cada variable del
+  modelo y la probabilidad de alta incidencia y su explicación SHAP se recalculan
+  al instante. Además: comparación de los 5 modelos, matriz de confusión, barrido
+  de umbral, métricas por clase, efecto del balanceo y SHAP global.
+- **Pronóstico:** media móvil (baseline) vs Holt-Winters, MAPE seguro y RMSE,
+  proyección de 4–26 semanas con intervalo y **tabla de robustez** ante la ventana
+  de evaluación.
+- **Datos (CRUD):** registrar, listar, editar y eliminar consultas con
+  persistencia en Supabase (o SQLite local).
+
+### Diseño
+
+Tema oscuro tipo *sala de vigilancia epidemiológica*. La paleta categórica de los
+gráficos está **validada para daltonismo** sobre la superficie oscura del tablero
+(banda de luminosidad, piso de croma, separación CVD ≥ 8 entre pares adyacentes y
+contraste ≥ 3:1). El acento cian es solo cromo de interfaz y nunca codifica un
+dato. Definiciones en [`src/visualizations.py`](src/visualizations.py) (datos) y
+[`src/ui.py`](src/ui.py) (interfaz).
 
 ## 5. Estructura del proyecto
 
 ```
 mineria-proyecto-dengue-peru/
-├── app.py                  # Portada del dashboard
+├── app.py                  # Punto de entrada + navegación por pestañas
 ├── config.py               # Parámetros centralizados (editables en vivo)
 ├── train.py                # Genera TODOS los artefactos
 ├── requirements.txt
@@ -93,12 +140,15 @@ mineria-proyecto-dengue-peru/
 │   ├── raw/                # dataset original (no versionado)
 │   └── processed/          # dengue_semanal.csv, clusters, métricas
 ├── models/                 # *.joblib (modelos y preprocesador)
-├── pages/                  # 4 páginas de Streamlit
-├── src/                    # preprocessing, modeling, forecasting,
-│                           # clustering, visualizations, database, loaders
+├── views/                  # paneles del dashboard (Acerca de + 4 secciones)
+├── src/                    # preprocessing, simulation, modeling, forecasting,
+│                           # clustering, visualizations, ui, database, loaders
 ├── notebooks/              # 01–04 exploración y validación
-└── tests/                  # pruebas mínimas (pytest)
+└── tests/                  # pruebas (pytest)
 ```
+
+**Columnas añadidas al dataset maestro:** `origen` (`real` | `simulado`) y el valor
+`simulado` en `split`.
 
 ## 6. Instalación
 
@@ -121,12 +171,14 @@ pip install -r requirements.txt
 ## 7. Ejecución del entrenamiento
 
 ```bash
-python train.py            # usa data/processed/dengue_semanal.csv si existe
-python train.py --rebuild  # reconstruye el maestro desde data/raw/ (necesita el CSV original)
+python train.py                   # usa data/processed/dengue_semanal.csv si existe
+python train.py --rebuild         # reconstruye el maestro desde data/raw/ (necesita el CSV original)
+python train.py --sin-simulacion  # solo datos reales del MINSA, sin la extensión 2025–2026
 ```
 
 Genera: `dengue_semanal.csv`, `distritos_clusters.csv`,
-`metricas_clasificacion.csv`, `metricas_pronostico.csv` y los `.joblib` en `models/`.
+`metricas_clasificacion.csv`, `metricas_balanceo.csv`, `metricas_pronostico.csv`
+y los `.joblib` en `models/`.
 
 ## 8. Ejecución de Streamlit
 
@@ -157,7 +209,7 @@ streamlit run app.py
    `SUPABASE_URL` y `SUPABASE_KEY`. **Nunca subir `secrets.toml`** (está en `.gitignore`).
 
 3. Sin credenciales, el Panel 4 usa automáticamente **SQLite local**
-   (`data/consultas_local.db`) — solo para desarrollo, no es el CRUD definitivo.
+   (`data/consultas_local.db`).
 
 ## 10. Despliegue (Streamlit Cloud)
 
@@ -172,43 +224,64 @@ streamlit run app.py
 |---|---|
 | Clustering | K-means (`k` por codo + silueta, PCA 2D) |
 | Clasificación | **5 modelos**: Random Forest, XGBoost, Gradient Boosting, Regresión Logística y Árbol de Decisión (con balanceo de clases) |
-| Explicabilidad | SHAP (`TreeExplainer` sobre el mejor modelo de árbol) |
+| Explicabilidad | SHAP: `TreeExplainer` en los modelos de árbol y `LinearExplainer` en la Regresión Logística, de modo que **el mejor modelo por F1 también queda explicado** |
 | Pronóstico | Media móvil (baseline) y Holt-Winters (suavizado exponencial) |
+| Simulación de datos | Bootstrap estacional por distrito con recencia, factor de intensidad anual y persistencia AR(1) |
 
-## 12. Métricas (ejecución real, test = 2024)
+## 12. Métricas (ejecución real)
 
-**Clasificación** (umbral 0.50), ordenado por F1:
+**Clasificación** — umbral 0.50, test = 2024, **solo datos reales** (la extensión
+simulada está excluida). Ordenado por F1:
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| **Regresión Logística (mejor por F1)** | 0.775 | 0.764 | 0.807 | **0.785** | 0.859 |
-| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
-| Gradient Boosting | 0.733 | 0.675 | 0.919 | 0.778 | 0.880 |
-| Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
-| Árbol de Decisión | 0.725 | 0.670 | 0.907 | 0.771 | 0.871 |
+| **Regresión Logística (mejor por F1)** | 0.770 | 0.756 | 0.806 | **0.780** | 0.855 |
+| XGBoost | 0.729 | 0.671 | 0.914 | 0.774 | 0.876 |
+| Gradient Boosting | 0.724 | 0.665 | 0.920 | 0.772 | 0.876 |
+| Random Forest | 0.720 | 0.660 | 0.923 | 0.769 | 0.875 |
+| Árbol de Decisión | 0.716 | 0.660 | 0.908 | 0.764 | 0.867 |
 
-> Nota: los modelos de árbol logran mayor **recall** de la clase minoritaria (~0.91),
-> útil si el costo de un falso negativo es alto; la Regresión Logística ofrece el mejor
-> **equilibrio** (F1). El mejor modelo se elige automáticamente por F1.
+> Los modelos de árbol logran mayor **recall** de la clase minoritaria (~0.92),
+> útil si el costo de un falso negativo es alto; la Regresión Logística ofrece el
+> mejor **equilibrio** (F1). El mejor modelo se elige automáticamente por F1.
 
-**Pronóstico** (serie nacional):
+**Efecto del balanceo** (recall de la clase 1 en test): Random Forest pasa de
+0.618 a 0.923 y XGBoost de 0.636 a 0.914 al aplicar `class_weight` /
+`scale_pos_weight`.
 
-| Modelo | MAPE | RMSE |
-|---|---|---|
-| Media móvil | 44.9 % | 459.0 |
-| Holt-Winters | **31.7 %** | **417.5** |
+**Pronóstico** (serie nacional). Qué modelo gana **depende de la ventana de
+evaluación**, así que se publica la tabla completa en lugar de una sola cifra:
 
-**Clustering:** k = 3, silueta ≈ 0.35 (baja / media / alta transmisión).
+| Ventana de prueba | MAPE media móvil | RMSE media móvil | MAPE Holt-Winters | RMSE Holt-Winters | Elegido |
+|---|---|---|---|---|---|
+| 8 semanas | 19.6 % | 1 730.9 | 96.3 % | 8 400.1 | media móvil |
+| **13 semanas (por defecto)** | 43.0 % | 4 205.4 | **26.6 %** | **2 597.2** | **Holt-Winters** |
+| 26 semanas | 65.0 % | 5 706.7 | 58.4 % | 5 296.6 | Holt-Winters |
+
+> La ventana por defecto es de **13 semanas (un trimestre epidemiológico)**. Con 8
+> semanas o menos la media móvil gana por construcción: pronostica una constante y
+> en tan pocas semanas eso se parece al promedio real, mientras que un componente
+> estacional de 52 semanas no alcanza a expresarse. El Panel 3 muestra esta tabla
+> y permite mover la ventana en vivo.
+
+**Clustering:** k = 3, silueta ≈ 0.353, PCA 2D explica 68.8 % de la varianza.
+Grupos: 342 distritos de baja transmisión, 195 de media y 34 de alta.
 
 > Los valores exactos se regeneran con `python train.py` y quedan en
 > `data/processed/metricas_*.csv`. Deben coincidir con lo mostrado en el dashboard.
 
 ## 13. Advertencias y limitaciones
 
+- **Los registros de 2025 y 2026 son simulados**, no vigilancia real del MINSA
+  (ver §3.1). No entrenan ni evalúan ningún modelo, pero sí son el punto de
+  partida del pronóstico mostrado.
 - El objetivo es una etiqueta **estadística**, no una definición oficial de brote.
-- Existe **cambio de distribución** train→test por la epidemia de 2023–2024.
+- Existe **cambio de distribución** train→test por la epidemia de 2023–2024: la
+  clase positiva pasa de ~10 % en entrenamiento a ~50 % en prueba.
 - SHAP indica asociación, **no causalidad**.
-- El intervalo del pronóstico es **aproximado** (±1.96·σ de los residuos).
+- El intervalo del pronóstico es **aproximado** (±1.96·σ de los residuos), no un
+  intervalo de predicción exacto.
+- Qué modelo de pronóstico gana **depende de la ventana de evaluación** (ver §12).
 - El pronóstico a nivel distrito requiere suficiente historia continua.
 
 ---
@@ -230,6 +303,11 @@ cambiarlos, reentrenar con `python train.py` y revisar el resultado indicado.
 | Periodo de prueba | `TEST_YEARS`, `VALIDATION_YEARS` | Años de val/test | Split temporal |
 | Ventana de media móvil | `MOVING_AVERAGE_WINDOW` | Suavizado del baseline | Panel 3 (MAPE/RMSE) |
 | Periodos de pronóstico | `FORECAST_PERIODS` | Semanas proyectadas | Panel 3 |
+| Ventana de evaluación | `FORECAST_EVAL_PERIODS` | Qué modelo de pronóstico gana | Panel 3 (tabla de robustez) |
+| Horizonte simulado | `SIM_END_ANO`, `SIM_END_SEMANA` | Hasta cuándo llega el dataset | Todos los paneles |
+| Intensidad simulada | `SIM_INTENSIDAD` | Magnitud del brote 2025/2026 | Panel 3 (nivel de la serie) |
+| Persistencia simulada | `SIM_PERSISTENCIA` | Suavidad de la curva generada | Panel 1 (evolución temporal) |
+| Desactivar simulación | `SIMULAR_EXTENSION = False` | Vuelve al dataset solo real | Periodo mostrado |
 
 **Comando de reentrenamiento:** `python train.py` (añadir `--rebuild` solo si se
 cambió el preprocesamiento o el dataset original).
@@ -240,14 +318,27 @@ cambió el preprocesamiento o el dataset original).
 pytest -q
 ```
 
-Verifican: el dataset original no se modifica, la fecha semanal es válida y única,
-los lags/medias móviles no usan futuro, el objetivo no está entre los predictores,
-la clave distrito-fecha es única, y que los modelos entrenan, guardan/cargan y
-producen probabilidades en [0, 1].
+**30 pruebas** que verifican:
+
+- *Preprocesamiento:* el dataset original no se modifica, la fecha semanal es
+  válida y única, los lags/medias móviles no usan futuro, el objetivo no está
+  entre los predictores y la clave distrito-fecha es única.
+- *Modelos:* entrenan, se guardan/cargan y producen probabilidades en [0, 1].
+- *Simulación:* la extensión no altera ninguna fila real, las filas generadas
+  quedan fuera de train/val/test, el conjunto de prueba sigue siendo el último
+  año real, la simulación es reproducible, conserva la estacionalidad y no
+  reactiva distritos que dejaron de reportar.
+- *Calendario del pronóstico:* fecha ↔ (año, semana) son inversas exactas, la
+  serie no pierde semanas en años que no empiezan en lunes (regresión: el
+  `asfreq("W-MON")` anterior anulaba 2025 y 2026) y el pronóstico arranca después
+  del último dato con intervalos coherentes.
 
 ## 16. Integrantes
 
-- _(completar)_
+- **Herrera Gómez, Gerardo Jesús**
+- **Mejía Carrasco, Marlo Gabriel**
+- **Ortiz Herrera, Fabrizio Peter**
+- **Sosa Lupuche, Carlos Manuel**
 
 ## 17. Enlace al dashboard
 

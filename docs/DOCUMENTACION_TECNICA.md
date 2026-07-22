@@ -38,7 +38,7 @@ muestran resultados, y todos los parámetros ajustables están en `config.py`.
         ▼                                                        │
  ┌───────────────┬───────────────────┬────────────────────┐     │
  │ clustering    │ clasificación     │ pronóstico         │     │
- │ K-means       │ RF / XGBoost      │ Holt-Winters       │     │
+ │ K-means       │ 5 clasificadores  │ Holt-Winters       │     │
  ▼               ▼                   ▼                    │     │
  kmeans.joblib   random_forest.joblib  metricas_*.csv     │     │
  scaler.joblib   xgboost.joblib                           │     │
@@ -47,8 +47,8 @@ muestran resultados, y todos los parámetros ajustables están en `config.py`.
         │                                                        │
         ▼   src/loaders.py (carga cacheada)                      │
  ┌──────────────────────────────────────────────────────────────┘
- │  app.py + pages/  (Streamlit)  ──►  usuario en el navegador
- │  pages/4_CRUD.py  ──►  src/database.py  ──►  Supabase / SQLite
+ │  app.py + views/  (Streamlit)  ──►  usuario en el navegador
+ │  views/crud.py    ──►  src/database.py  ──►  Supabase / SQLite
  └──────────────────────────────────────────────────────────────
 ```
 
@@ -109,6 +109,39 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 | Entrenamiento | 2000–2022 | Ajustar modelos y umbral |
 | Validación | 2023 | Referencia intermedia |
 | Prueba | 2024 | Evaluación final |
+| **Simulado** | **2025–2026** | **Ninguno**: excluido del modelado |
+
+La división se calcula **solo sobre los años reales**, de modo que el conjunto de
+prueba nunca puede caer sobre registros generados.
+
+### Extensión simulada del dataset (`src/simulation.py`)
+
+La vigilancia publicada del MINSA termina en 2024. Para que el pronóstico se
+muestre en fechas vigentes, el maestro se extiende hasta la semana 22 de 2026
+(28/05/2026) con **40 922 filas generadas** en 553 distritos.
+
+**Método — bootstrap estacional por distrito:**
+
+1. Solo se extienden distritos activos en los últimos 2 años reales: uno que dejó
+   de reportar hace años no se "reactiva".
+2. Para cada semana objetivo `w` se muestrea de los casos históricos del propio
+   distrito en las semanas `[w−2, w+2]` (ventana circular), de los últimos 6 años,
+   ponderando por recencia (`peso = 0.65^antigüedad`).
+3. Se aplica un factor de intensidad anual (2025: 0.80, 2026: 0.90).
+4. El nivel se **suaviza** con una ventana de 3 y se multiplica por una
+   **intensidad persistente AR(1)** (ρ = 0.75). Sin este paso la serie generada
+   tendría un salto artificial semana a semana que las curvas epidémicas reales
+   no presentan.
+5. Todas las features derivadas (lags, medias móviles, objetivo) se recalculan
+   sobre la serie completa para que no queden discontinuidades en el empalme.
+
+**Garantías (con pruebas automáticas en `tests/test_simulation.py`):** no se
+altera ninguna fila real, las generadas quedan fuera de train/val/test, el
+conjunto de prueba sigue siendo 2024, la salida es reproducible con
+`RANDOM_STATE` y el pico estacional se conserva.
+
+Todo es desactivable con `python train.py --sin-simulacion` o
+`config.SIMULAR_EXTENSION = False`.
 
 ---
 
@@ -127,20 +160,23 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 | Módulo | Responsabilidad |
 |---|---|
 | `preprocessing.py` | Limpieza, agregación distrito-semana, features, objetivo y split. |
+| `simulation.py` | Extensión **simulada** 2025–mayo 2026 por bootstrap estacional (`origen`/`split` = `simulado`). |
 | `clustering.py` | Perfil por distrito + K-means (codo, silueta, PCA). |
-| `modeling.py` | Pipeline RF/XGBoost, métricas, umbral, SHAP y fila de predicción. |
+| `modeling.py` | Pipelines de los 5 modelos, métricas, umbral, explicadores SHAP y fila de predicción. |
 | `forecasting.py` | Serie temporal, media móvil, Holt-Winters, MAPE seguro y RMSE. |
-| `visualizations.py` | Gráficos Plotly reutilizables (histogramas, correlación, clusters, etc.). |
+| `visualizations.py` | Gráficos Plotly y **paleta validada para daltonismo** sobre superficie oscura. |
+| `ui.py` | CSS del tema, cabeceras, tarjetas KPI y aviso de datos simulados. |
 | `database.py` | Capa CRUD desacoplada: Supabase o SQLite local. |
 | `loaders.py` | Carga **cacheada** de datos y modelos para Streamlit. |
 
-### `pages/` (una página por panel)
+### `views/` (una página por sección)
 | Página | Contenido |
 |---|---|
-| `1_EDA_Clustering.py` | Filtros, resumen, EDA (evolución, distribución, correlación), outliers 1.5·IQR, clustering. |
-| `2_Modelo_Predictivo.py` | RF vs XGBoost, umbral, matriz de confusión, SHAP global/local, predicción en vivo. |
-| `3_Pronostico.py` | Serie por nivel, evaluación (MAPE/RMSE), pronóstico 4+ semanas con intervalo. |
-| `4_CRUD.py` | Crear, listar, editar y eliminar consultas. |
+| `acerca.py` | Portada: problema, fuente, definición del objetivo, equipo y advertencias. |
+| `eda_clustering.py` | Filtros, resumen, EDA (evolución, distribución, correlación), outliers 1.5·IQR, clustering. |
+| `modelo_predictivo.py` | Simulador con sliders, comparación de 5 modelos, umbral, matriz de confusión, SHAP global/local. |
+| `pronostico.py` | Serie por nivel, evaluación (MAPE/RMSE), pronóstico con intervalo y tabla de robustez. |
+| `crud.py` | Crear, listar, editar y eliminar consultas. |
 
 ### `data/`, `models/`, `notebooks/`, `tests/`
 - `data/raw/`: dataset original (no versionado).
@@ -176,18 +212,30 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 - **Métricas:** accuracy, precision, recall, F1, ROC-AUC y matriz de confusión
   (TP/TN/FP/FN). El ganador se elige por **F1** (equilibrio), no por accuracy.
 - **Umbral:** deslizador que muestra el efecto sobre precision/recall/F1 y FP/FN.
-- **SHAP:** `TreeExplainer` sobre el mejor modelo; `summary_plot` global y
-  `waterfall` local. Muestra **asociación, no causalidad**.
-- **Predicción en vivo:** el usuario elige distrito; las variables derivadas se
-  calculan automáticamente desde el historial (no se piden variables técnicas).
+- **SHAP:** `TreeExplainer` en los modelos de árbol y `LinearExplainer` en la
+  Regresión Logística, de modo que el mejor modelo por F1 también queda explicado.
+  `summary_plot` global y barras de contribución locales. Muestra **asociación,
+  no causalidad**.
+- **Simulador de predicción:** un slider por cada variable del modelo, precargados
+  con los valores reales del distrito elegido. La probabilidad y la explicación
+  SHAP se recalculan en cada movimiento. `semana_sen`/`semana_cos` se derivan de
+  un slider de semana epidemiológica en vez de editarse a mano. El botón
+  *Sincronizar derivadas* recalcula promedios, variabilidad y crecimiento desde
+  los lags para volver a un escenario coherente.
 
 ### Panel 3 — Pronóstico
 - **Serie:** casos agregados a nivel nacional, de departamento o de distrito.
 - **Modelos:** media móvil (baseline) vs **Holt-Winters** (suavizado exponencial,
   estacionalidad de 52 semanas si hay historia suficiente).
-- **Evaluación:** se separa un tramo final cronológico; se reportan **MAPE seguro**
-  (excluye semanas con 0 casos reales para no dividir entre cero) y **RMSE**.
-- **Pronóstico:** ≥ 4 semanas futuras con intervalo aproximado (±1.96·σ de residuos).
+- **Evaluación:** se separa un tramo final cronológico (13 semanas por defecto);
+  se reportan **MAPE seguro** (excluye semanas con 0 casos reales para no dividir
+  entre cero) y **RMSE**.
+- **Robustez:** qué modelo gana depende de la ventana de evaluación, así que el
+  panel publica la tabla con varias ventanas en lugar de una sola cifra.
+- **Calendario:** la serie se reindexa sobre el calendario epidemiológico real. Un
+  `asfreq("W-MON")` previo anulaba todo año cuyo 1 de enero no cayera en lunes
+  (2025 y 2026), dejando la serie en ceros; hay pruebas de regresión para esto.
+- **Pronóstico:** 4–26 semanas futuras con intervalo aproximado (±1.96·σ de residuos).
 
 ### Panel 4 — CRUD
 - Registra las consultas/predicciones realizadas.
@@ -198,20 +246,24 @@ Por cada fila distrito-semana se calculan predictores usando **solo el pasado**:
 
 ---
 
-## 7. Resultados reales (test = 2024)
+## 7. Resultados reales (test = 2024, solo datos reales)
 
 **Clasificación** (umbral 0.50, 5 modelos, ordenado por F1):
 
 | Modelo | Accuracy | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| **Regresión Logística (mejor por F1)** | 0.775 | 0.764 | 0.807 | **0.785** | 0.859 |
-| XGBoost | 0.736 | 0.680 | 0.912 | 0.779 | 0.879 |
-| Gradient Boosting | 0.733 | 0.675 | 0.919 | 0.778 | 0.880 |
-| Random Forest | 0.727 | 0.669 | 0.921 | 0.775 | 0.879 |
-| Árbol de Decisión | 0.725 | 0.670 | 0.907 | 0.771 | 0.871 |
+| **Regresión Logística (mejor por F1)** | 0.770 | 0.756 | 0.806 | **0.780** | 0.855 |
+| XGBoost | 0.729 | 0.671 | 0.914 | 0.774 | 0.876 |
+| Gradient Boosting | 0.724 | 0.665 | 0.920 | 0.772 | 0.876 |
+| Random Forest | 0.720 | 0.660 | 0.923 | 0.769 | 0.875 |
+| Árbol de Decisión | 0.716 | 0.660 | 0.908 | 0.764 | 0.867 |
 
-**Pronóstico nacional:** Holt-Winters MAPE **31.7 %** / RMSE 417 vs media móvil
-44.9 % / 459. **Clustering:** k = 3, silueta ≈ 0.35.
+**Pronóstico nacional** (ventana de 13 semanas): Holt-Winters MAPE **26.6 %** /
+RMSE 2 597 vs media móvil 43.0 % / 4 205. Con ventana de 8 semanas el orden se
+invierte: ver la tabla de robustez del §12 del README.
+
+**Clustering:** k = 3, silueta ≈ 0.353 (342 distritos de baja transmisión, 195 de
+media y 34 de alta).
 
 > Los números exactos se regeneran con `python train.py` y quedan en
 > `data/processed/metricas_*.csv`; deben coincidir con lo mostrado en el dashboard.
