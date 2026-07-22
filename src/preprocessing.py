@@ -234,7 +234,14 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 # Variable objetivo y division temporal
 # ---------------------------------------------------------------------------
 def temporal_split_years(df: pd.DataFrame):
-    """Devuelve (train_years, val_years, test_years) segun config."""
+    """Devuelve (train_years, val_years, test_years) segun config.
+
+    Si el dataset trae una extension simulada (columna 'origen'), la division
+    se calcula SOLO con los anios reales: el conjunto de prueba nunca puede
+    caer sobre datos generados.
+    """
+    if "origen" in df.columns:
+        df = df[df["origen"] == "real"]
     years = sorted(df["ano"].dropna().unique().tolist())
     test_years = years[-config.TEST_YEARS:]
     val_years = years[-(config.TEST_YEARS + config.VALIDATION_YEARS): -config.TEST_YEARS]
@@ -258,6 +265,9 @@ def add_target_and_split(df: pd.DataFrame, percentile=None) -> pd.DataFrame:
     df["split"] = "train"
     df.loc[df["ano"].isin(val_years), "split"] = "val"
     df.loc[df["ano"].isin(test_years), "split"] = "test"
+    # Las filas generadas quedan fuera de train/val/test: no entrenan ni evaluan.
+    if "origen" in df.columns:
+        df.loc[df["origen"] == "simulado", "split"] = "simulado"
 
     # Umbral por distrito usando SOLO entrenamiento
     train_mask = df["split"] == "train"
@@ -318,6 +328,7 @@ def build_master_dataset(raw_path=None, verbose=True) -> pd.DataFrame:
     log(f"      distritos conservados: {conf['ubigeo'].nunique()}")
 
     log("[7/7] Variable objetivo y division temporal...")
+    conf["origen"] = "real"  # todo lo que sale del CSV del MINSA es dato real
     final = add_target_and_split(conf)
 
     cols = (
@@ -325,7 +336,7 @@ def build_master_dataset(raw_path=None, verbose=True) -> pd.DataFrame:
          "fecha", "week_id", "casos", "edad_promedio", "prop_con_signos",
          "prop_grave", "prop_femenino"]
         + [c for c in FEATURE_NUMERIC if c not in ("casos",)]
-        + ["umbral_incidencia", "split", TARGET]
+        + ["umbral_incidencia", "split", TARGET, "origen"]
     )
     final = final[cols]
     return final

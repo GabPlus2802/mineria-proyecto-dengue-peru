@@ -8,8 +8,13 @@ Genera TODOS los artefactos que necesita el dashboard:
   - models/*.joblib                           (modelos y preprocesador)
 
 Uso:
-    python train.py            # usa el dataset maestro si existe
-    python train.py --rebuild  # reconstruye el dataset maestro desde el CSV crudo
+    python train.py                   # usa el dataset maestro si existe
+    python train.py --rebuild         # lo reconstruye desde el CSV crudo del MINSA
+    python train.py --sin-simulacion  # sin la extension 2025-2026 (solo datos reales)
+
+Nota: por defecto el maestro se extiende hasta mayo de 2026 con registros
+SIMULADOS (ver src/simulation.py). Esas filas llevan origen = "simulado" y no
+participan del entrenamiento, las metricas ni el clustering.
 """
 
 from __future__ import annotations
@@ -20,25 +25,47 @@ import joblib
 import pandas as pd
 
 import config
-from src import clustering, forecasting, modeling, preprocessing
+from src import clustering, forecasting, modeling, preprocessing, simulation
 
 
-def cargar_o_construir_maestro(rebuild: bool) -> pd.DataFrame:
+def cargar_o_construir_maestro(rebuild: bool, simular: bool) -> pd.DataFrame:
     if rebuild or not config.DENGUE_SEMANAL.exists():
         print(">> Construyendo dataset maestro desde el CSV crudo...")
         df = preprocessing.build_master_dataset()
-        config.DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
-        df.to_csv(config.DENGUE_SEMANAL, index=False, encoding="utf-8")
     else:
         print(">> Cargando dataset maestro existente...")
         df = pd.read_csv(config.DENGUE_SEMANAL)
+
+    if simular:
+        print(">> Extension SIMULADA del dataset (no son datos reales)...")
+        df = simulation.extender_master(df)
+    elif "origen" not in df.columns:
+        df["origen"] = "real"
+    else:
+        df = df[df["origen"] == "real"].copy()
+
+    config.DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+    df.to_csv(config.DENGUE_SEMANAL, index=False, encoding="utf-8")
+
+    res = simulation.resumen(df)
     print(f"   {len(df):,} filas | {df['ubigeo'].nunique()} distritos")
+    if res["tiene_simulacion"]:
+        print(f"   reales: {res['filas_reales']:,} | simuladas: {res['filas_simuladas']:,} "
+              f"({res['desde']:%Y-%m-%d} a {res['hasta']:%Y-%m-%d})")
     return df
+
+
+def solo_real(df: pd.DataFrame) -> pd.DataFrame:
+    """Subconjunto de datos reales: lo unico que entrena y evalua modelos."""
+    if "origen" not in df.columns:
+        return df
+    return df[df["origen"] == "real"].copy()
 
 
 def entrenar_clustering(df: pd.DataFrame):
     print("\n=== CLUSTERING (K-means) ===")
-    perfil = clustering.district_profile(df)
+    print("   (solo datos reales)")
+    perfil = clustering.district_profile(solo_real(df))
     res = clustering.run_kmeans(perfil)
     print(f"   k elegido: {res['k']} (mejor silueta sugiere k={res['k_auto_silueta']})")
     print(f"   silueta final: {res['silueta']:.3f}")
@@ -55,8 +82,9 @@ def entrenar_clustering(df: pd.DataFrame):
 
 
 def entrenar_clasificacion(df: pd.DataFrame):
-    print("\n=== CLASIFICACION (Random Forest vs XGBoost) ===")
-    data = modeling.get_modeling_frame(df)
+    print("\n=== CLASIFICACION (5 modelos) ===")
+    print("   (solo datos reales: train <= 2022, val = 2023, test = 2024)")
+    data = modeling.get_modeling_frame(solo_real(df))
     print(f"   train={len(data['y_train']):,}  val={len(data['y_val']):,}  test={len(data['y_test']):,}")
 
     models, info = modeling.train_models(data)
@@ -123,10 +151,14 @@ def entrenar_pronostico(df: pd.DataFrame):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rebuild", action="store_true", help="Reconstruir dataset maestro")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Reconstruir el dataset maestro desde el CSV crudo")
+    parser.add_argument("--sin-simulacion", action="store_true",
+                        help="No extender el dataset a 2025-2026 (solo datos reales del MINSA)")
     args = parser.parse_args()
 
-    df = cargar_o_construir_maestro(args.rebuild)
+    simular = config.SIMULAR_EXTENSION and not args.sin_simulacion
+    df = cargar_o_construir_maestro(args.rebuild, simular)
     entrenar_clustering(df)
     entrenar_clasificacion(df)
     entrenar_pronostico(df)

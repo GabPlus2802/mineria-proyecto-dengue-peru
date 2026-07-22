@@ -71,8 +71,39 @@ MIN_SEMANAS_DISTRITO = 30
 FORECAST_PERIODS = 4
 MOVING_AVERAGE_WINDOW = 4
 
+# Semanas reservadas al final de la serie para evaluar los modelos.
+# 13 semanas = un trimestre epidemiologico. Con 8 semanas o menos el componente
+# estacional de 52 semanas no alcanza a expresarse y la media movil (que
+# pronostica una constante) gana por construccion. Que modelo gana DEPENDE de
+# esta ventana: el Panel 3 muestra la tabla de robustez con varias ventanas.
+FORECAST_EVAL_PERIODS = 13
+FORECAST_EVAL_VENTANAS = [8, 13, 26]  # ventanas de la tabla de robustez
+
 # ---------------------------------------------------------------------------
-# Division temporal (por anio). El ultimo anio es prueba, el previo validacion.
+# Division temporal (por anio). El ultimo anio REAL es prueba, el previo validacion.
+# Las filas simuladas quedan fuera (split = "simulado").
 # ---------------------------------------------------------------------------
 TEST_YEARS = 1        # ultimos N anios -> prueba
 VALIDATION_YEARS = 1  # N anios anteriores a prueba -> validacion
+
+# ---------------------------------------------------------------------------
+# Extension SIMULADA del dataset (src/simulation.py)
+#
+# La vigilancia publicada del MINSA llega hasta 2024. Para que el pronostico se
+# muestre en fechas vigentes se generan registros posteriores por bootstrap
+# estacional. NO SON DATOS REALES: van marcados con origen = "simulado" y no
+# intervienen en el entrenamiento, las metricas ni el clustering.
+# ---------------------------------------------------------------------------
+SIMULAR_EXTENSION = True   # False -> el dataset se queda solo con datos reales
+SIM_END_ANO = 2026         # horizonte de la extension
+SIM_END_SEMANA = 22        # semana 22 de 2026 ~ finales de mayo
+SIM_LOOKBACK_ANIOS = 6     # anios historicos que alimentan el muestreo
+SIM_ANIOS_ACTIVIDAD = 2    # solo se extienden distritos activos en los ultimos N anios reales
+SIM_VENTANA_SEMANAS = 2    # ventana estacional +-N semanas alrededor de la semana objetivo
+SIM_DECAIMIENTO = 0.65     # peso por recencia: peso = DECAIMIENTO ** (antiguedad en anios)
+SIM_RUIDO_SIGMA = 0.25     # amplitud del ruido multiplicativo (escala log)
+SIM_PERSISTENCIA = 0.75    # AR(1): que tanto persiste la intensidad de una semana a la siguiente
+SIM_SUAVIZADO = 3          # ventana de suavizado del nivel estacional muestreado
+# Factor de intensidad por anio: refleja el descenso posterior al pico epidemico
+# de 2023-2024. Editable para mostrar escenarios en la exposicion.
+SIM_INTENSIDAD = {2025: 0.80, 2026: 0.90}

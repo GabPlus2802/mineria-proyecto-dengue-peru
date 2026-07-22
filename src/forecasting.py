@@ -25,17 +25,52 @@ def build_series(df: pd.DataFrame, nivel: str = "nacional", clave: str | None = 
 
     nivel: 'nacional' | 'departamento' | 'distrito'
     clave: nombre del departamento o ubigeo del distrito (segun nivel).
+
+    La serie se reindexa sobre el calendario epidemiologico real del dataset
+    (no sobre una rejilla de lunes): la fecha de una semana epidemiologica cae
+    en el dia de la semana del 1 de enero de su anio, que cambia cada anio.
+    Las semanas sin registro dentro del rango activo se completan con 0.
     """
     d = df.copy()
     d["fecha"] = pd.to_datetime(d["fecha"])
+    calendario = pd.DatetimeIndex(sorted(d["fecha"].unique()))
+
     if nivel == "departamento" and clave is not None:
         d = d[d["departamento"] == clave]
     elif nivel == "distrito" and clave is not None:
         d = d[d["ubigeo"].astype(str) == str(clave)]
 
     serie = d.groupby("fecha")["casos"].sum().sort_index()
-    serie = serie.asfreq("W-MON").fillna(0.0) if serie.index.inferred_freq is None else serie
-    return serie
+    if serie.empty:
+        return serie.astype(float)
+
+    # Rejilla completa dentro del periodo activo del nivel seleccionado
+    rango = calendario[(calendario >= serie.index.min()) & (calendario <= serie.index.max())]
+    return serie.reindex(rango).fillna(0.0).astype(float)
+
+
+def _ano_semana(fecha: pd.Timestamp) -> tuple[int, int]:
+    """Invierte el calendario epidemiologico: fecha -> (ano, semana).
+
+    Es la inversa exacta de preprocessing._epi_week_to_date, que define
+    fecha = 1 de enero + (semana - 1) * 7 dias.
+    """
+    fecha = pd.Timestamp(fecha)
+    return int(fecha.year), int((fecha.dayofyear - 1) // 7 + 1)
+
+
+def fechas_futuras(ultima: pd.Timestamp, periods: int) -> pd.DatetimeIndex:
+    """Continua el calendario epidemiologico 'periods' semanas hacia adelante."""
+    import datetime
+
+    ano, semana = _ano_semana(ultima)
+    fechas = []
+    for _ in range(periods):
+        semana += 1
+        if semana > 52:
+            ano, semana = ano + 1, 1
+        fechas.append(datetime.date(ano, 1, 1) + datetime.timedelta(days=(semana - 1) * 7))
+    return pd.DatetimeIndex(pd.to_datetime(fechas))
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +111,11 @@ def moving_average_forecast(train: pd.Series, steps: int, window: int | None = N
 def _fit_holt_winters(train: pd.Series):
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
+    # El calendario epidemiologico no es una frecuencia regular de pandas
+    # (cada anio arranca en un dia distinto). Se ajusta sobre los valores, que
+    # sí estan igualmente espaciados en semanas.
+    train = pd.Series(np.asarray(train, dtype=float)).reset_index(drop=True)
+
     usar_estacional = len(train) >= 2 * 52
     if usar_estacional:
         modelo = ExponentialSmoothing(
@@ -108,7 +148,7 @@ def holt_winters_forecast(train: pd.Series, steps: int):
 # ---------------------------------------------------------------------------
 def evaluate_models(serie: pd.Series, test_periods: int | None = None) -> dict:
     """Separa cronologicamente 'test_periods' al final y evalua ambos modelos."""
-    test_periods = test_periods or max(config.FORECAST_PERIODS, 8)
+    test_periods = test_periods or config.FORECAST_EVAL_PERIODS
     serie = serie.astype(float)
     train, test = serie.iloc[:-test_periods], serie.iloc[-test_periods:]
 
@@ -136,14 +176,39 @@ def evaluate_models(serie: pd.Series, test_periods: int | None = None) -> dict:
     }
 
 
+def tabla_robustez(serie: pd.Series, ventanas: list[int] | None = None) -> pd.DataFrame:
+    """Compara ambos modelos en varias ventanas de evaluacion.
+
+    Que modelo gana depende de cuantas semanas se reserven para prueba: en una
+    ventana corta la media movil (una constante) puede ganar por construccion.
+    Mostrar la tabla completa evita elegir la ventana que favorece al resultado
+    deseado.
+    """
+    ventanas = ventanas or config.FORECAST_EVAL_VENTANAS
+    filas = []
+    for v in ventanas:
+        if len(serie) <= v + 2 * config.MOVING_AVERAGE_WINDOW:
+            continue
+        ev = evaluate_models(serie, v)
+        r = ev["resultados"]
+        filas.append({
+            "ventana de prueba (semanas)": v,
+            "MAPE media movil": round(r["media_movil"]["mape"], 1),
+            "RMSE media movil": round(r["media_movil"]["rmse"], 1),
+            "MAPE Holt-Winters": round(r["holt_winters"]["mape"], 1),
+            "RMSE Holt-Winters": round(r["holt_winters"]["rmse"], 1),
+            "elegido (menor RMSE)": ev["mejor_modelo"],
+        })
+    return pd.DataFrame(filas)
+
+
 def forecast_future(serie: pd.Series, periods: int | None = None) -> pd.DataFrame:
     """Ajusta con toda la serie y proyecta 'periods' semanas futuras con intervalo."""
     periods = periods or config.FORECAST_PERIODS
     serie = serie.astype(float)
     pred, (lower, upper) = holt_winters_forecast(serie, periods)
 
-    ultima = serie.index[-1]
-    fechas = pd.date_range(ultima, periods=periods + 1, freq="W-MON")[1:]
+    fechas = fechas_futuras(serie.index[-1], periods)
     return pd.DataFrame(
         {"fecha": fechas, "pronostico": pred, "inferior": lower, "superior": upper}
     )

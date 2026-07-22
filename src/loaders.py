@@ -17,7 +17,29 @@ import config
 def load_master() -> pd.DataFrame:
     df = pd.read_csv(config.DENGUE_SEMANAL)
     df["fecha"] = pd.to_datetime(df["fecha"])
+    if "origen" not in df.columns:
+        df["origen"] = "real"
     return df
+
+
+def solo_real(df: pd.DataFrame) -> pd.DataFrame:
+    """Filas de vigilancia real del MINSA (excluye la extension simulada)."""
+    return df[df["origen"] == "real"] if "origen" in df.columns else df
+
+
+def corte_simulado(df: pd.DataFrame):
+    """Ultima fecha con dato real, o None si el dataset no tiene extension."""
+    if "origen" not in df.columns or not (df["origen"] == "simulado").any():
+        return None
+    return pd.to_datetime(solo_real(df)["fecha"]).max()
+
+
+@st.cache_data(show_spinner=False)
+def resumen_simulacion() -> dict:
+    """Cifras de la extension simulada, para los avisos del dashboard."""
+    from src import simulation
+
+    return simulation.resumen(load_master())
 
 
 @st.cache_data(show_spinner=False)
