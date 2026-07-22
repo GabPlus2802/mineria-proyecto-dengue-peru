@@ -8,17 +8,19 @@ import streamlit as st
 import config
 from src import clustering, loaders, ui, visualizations as viz
 
-ui.setup_page("EDA y Clustering", "📊")
-
 if not loaders.artefactos_listos():
     st.error("Faltan artefactos. Ejecuta `python train.py --rebuild`.")
     st.stop()
 
-ui.hero("📊 Panel 1 — EDA y Clustering",
-        "Exploracion de los datos, deteccion de outliers y agrupamiento de distritos.")
+ui.hero("📊 EDA y Clustering",
+        "Exploracion de los datos, deteccion de outliers y agrupamiento de distritos "
+        "segun su comportamiento epidemiologico.",
+        badges=["1.5·IQR", "K-means + PCA", "Filtros en vivo"])
 
 df = loaders.load_master()
 clusters = loaders.load_clusters()
+corte = loaders.corte_simulado(df)
+ui.banner_simulacion(loaders.resumen_simulacion())
 
 # ---------------------------------------------------------------------------
 # Filtros interactivos
@@ -29,23 +31,37 @@ dep_sel = st.sidebar.selectbox("Departamento", deps)
 anos = sorted(df["ano"].unique().tolist())
 rango = st.sidebar.select_slider("Rango de anios", options=anos,
                                  value=(anos[0], anos[-1]))
+solo_reales = st.sidebar.checkbox(
+    "Excluir el periodo simulado", value=False,
+    help="Deja fuera los registros generados de 2025-2026 y muestra unicamente la "
+         "vigilancia real publicada por el MINSA.")
 
 f = df[(df["ano"] >= rango[0]) & (df["ano"] <= rango[1])].copy()
 if dep_sel != "(Todos)":
     f = f[f["departamento"] == dep_sel]
+if solo_reales:
+    f = loaders.solo_real(f)
+
+if f.empty:
+    st.warning("Los filtros seleccionados no dejan ningun registro.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
 # Resumen
 # ---------------------------------------------------------------------------
 ui.section("Resumen", "Indicadores segun los filtros seleccionados.")
+n_sim = int((f["origen"] == "simulado").sum()) if "origen" in f.columns else 0
 ui.kpi_row([
-    {"label": "Registros", "value": f"{len(f):,}", "icon": "📅", "accent": "#3b82f6"},
+    {"label": "Registros", "value": f"{len(f):,}", "icon": "📅", "accent": viz.SERIE[0],
+     "sub": f"{n_sim:,} simulados" if n_sim else "todos reales"},
     {"label": "Total de casos", "value": f"{int(f['casos'].sum()):,}", "icon": "🦟",
-     "accent": "#ef4444"},
+     "accent": viz.SERIE[7]},
     {"label": "Departamentos", "value": f["departamento"].nunique(), "icon": "🗺️",
-     "accent": "#f59e0b"},
-    {"label": "Distritos", "value": f["ubigeo"].nunique(), "icon": "📍", "accent": "#0ea5a4"},
-    {"label": "Periodo", "value": f"{rango[0]}–{rango[1]}", "icon": "⏱️", "accent": "#8b5cf6"},
+     "accent": viz.SERIE[3]},
+    {"label": "Distritos", "value": f"{f['ubigeo'].nunique():,}", "icon": "📍",
+     "accent": viz.SERIE[2]},
+    {"label": "Periodo", "value": f"{rango[0]}–{rango[1]}", "icon": "⏱️",
+     "accent": viz.SERIE[6]},
 ])
 
 # ---------------------------------------------------------------------------
@@ -58,8 +74,12 @@ tab1, tab2, tab3, tab4 = st.tabs(
 
 with tab1:
     serie = f.groupby("fecha")["casos"].sum()
-    st.plotly_chart(viz.evolucion_temporal(serie), width='stretch')
-    st.caption("Casos semanales agregados segun los filtros seleccionados.")
+    st.plotly_chart(
+        viz.evolucion_temporal(serie, corte_simulado=None if solo_reales else corte),
+        width='stretch')
+    st.caption("Casos semanales agregados segun los filtros seleccionados. El tramo "
+               "punteado corresponde al periodo simulado." if not solo_reales and corte
+               else "Casos semanales agregados segun los filtros seleccionados.")
 
 with tab2:
     col1, col2 = st.columns(2)
@@ -103,11 +123,14 @@ if len(casos_pos) > 0:
     lim_inf, lim_sup = q1 - 1.5 * iqr, q3 + 1.5 * iqr
     outliers = f[(f["casos"] > lim_sup)]
     ui.kpi_row([
-        {"label": "Limite superior", "value": f"{lim_sup:.1f}", "icon": "📏", "accent": "#3b82f6"},
-        {"label": "Semanas outlier", "value": f"{len(outliers):,}", "icon": "⚠️", "accent": "#f97316"},
+        {"label": "Limite superior", "value": f"{lim_sup:.1f}", "icon": "📏",
+         "accent": viz.SERIE[0]},
+        {"label": "Semanas outlier", "value": f"{len(outliers):,}", "icon": "⚠️",
+         "accent": viz.SERIE[1]},
         {"label": "% del total", "value": f"{100*len(outliers)/max(len(f),1):.2f}%",
-         "icon": "％", "accent": "#f59e0b"},
-        {"label": "Caso maximo", "value": f"{int(f['casos'].max()):,}", "icon": "🔺", "accent": "#ef4444"},
+         "icon": "％", "accent": viz.SERIE[3]},
+        {"label": "Caso maximo", "value": f"{int(f['casos'].max()):,}", "icon": "🔺",
+         "accent": viz.SERIE[7]},
     ])
     st.info(
         "Los valores altos corresponden a semanas epidemicas reales; **no se eliminan** "
@@ -128,11 +151,21 @@ ui.section("Clustering de distritos (K-means)",
            "Cada distrito se resume en un perfil numerico (promedio, maximo, variabilidad, "
            "frecuencia de semanas con casos, semana tipica del pico) y se agrupa con K-means.")
 
-# Recalcular evaluacion de k para mostrar codo y silueta (rapido sobre 571 distritos)
-perfil = clustering.district_profile(df)
-from sklearn.preprocessing import StandardScaler
-X = StandardScaler().fit_transform(perfil[clustering.PERFIL_COLS].values)
-evaluacion = clustering.evaluar_k(X)
+st.caption("El clustering se construye **solo con datos reales**, igual que en el "
+           "entrenamiento: los registros simulados no alteran los grupos.")
+
+
+@st.cache_data(show_spinner="Evaluando el numero de clusters...")
+def _evaluacion_k():
+    """Codo y silueta por k. Se cachea: recorre los distritos uno a uno."""
+    from sklearn.preprocessing import StandardScaler
+
+    perfil = clustering.district_profile(loaders.solo_real(df))
+    X = StandardScaler().fit_transform(perfil[clustering.PERFIL_COLS].values)
+    return clustering.evaluar_k(X)
+
+
+evaluacion = _evaluacion_k()
 
 col1, col2 = st.columns([3, 2])
 with col1:

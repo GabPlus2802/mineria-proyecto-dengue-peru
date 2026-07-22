@@ -1,7 +1,8 @@
-"""Componentes y estilos de interfaz — tema CLARO refinado (estetica ChurnSense).
+"""Componentes y estilos de interfaz — "sala de vigilancia epidemiologica".
 
-Superficies claras, acento turquesa, etiquetas monoespaciadas y tarjetas con
-mucho aire. Paleta de datos accesible en src/visualizations.
+Superficie oscura azulada, acento cian de marca, etiquetas monoespaciadas y
+tarjetas con mucho aire. El acento cian es SOLO cromo de interfaz: los colores
+de datos viven en src/visualizations.py y estan validados para daltonismo.
 """
 
 from __future__ import annotations
@@ -10,9 +11,11 @@ import streamlit as st
 
 from src import visualizations as viz
 
-PALETTE = viz.PALETTE
-TEAL = viz.TEAL
-CORAL = viz.CORAL
+PALETTE = viz.SERIE
+ACENTO = viz.ACENTO
+CRITICO = viz.CRITICO
+BUENO = viz.BUENO
+AVISO = viz.AVISO
 
 _MONO = 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace'
 
@@ -22,28 +25,46 @@ _MONO = 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace'
 _CSS = f"""
 <style>
 :root {{
-  --bg:#f4f7fa; --card:#ffffff; --card-2:#fbfcfe;
-  --ink:#0f172a; --ink-2:#475569; --muted:#94a3b8;
-  --line:#e6ebf1; --line-2:#dbe2ea;
-  --teal:{TEAL}; --teal-d:#0d7d72; --coral:{CORAL};
+  --plano:{viz.PLANO}; --card:{viz.SUPERFICIE}; --card-2:#131e33;
+  --ink:{viz.TINTA}; --ink-2:{viz.TINTA_2}; --muted:{viz.MUTED};
+  --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+  --acento:{ACENTO}; --acento-d:#0e7490;
+  --bueno:{BUENO}; --aviso:{AVISO}; --critico:{CRITICO};
   --radius:14px;
-  --shadow:0 1px 2px rgba(15,23,42,0.05), 0 10px 26px rgba(15,23,42,0.05);
+  --shadow:0 1px 2px rgba(0,0,0,0.4), 0 12px 34px rgba(0,0,0,0.34);
   --mono:{_MONO};
 }}
 
+/* --- Plano de pagina: dos halos y una retícula muy tenue --- */
 .stApp, [data-testid="stAppViewContainer"] {{
   background:
-    radial-gradient(900px 480px at 100% -8%, rgba(14,165,164,0.06), transparent 60%),
-    radial-gradient(700px 420px at -6% 4%, rgba(59,130,246,0.05), transparent 58%),
-    var(--bg);
+    radial-gradient(1000px 520px at 92% -10%, rgba(34,211,238,0.10), transparent 62%),
+    radial-gradient(760px 460px at -8% 2%, rgba(57,135,229,0.10), transparent 60%),
+    linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px) 0 0/100% 34px,
+    var(--plano);
+  color:var(--ink);
 }}
-.block-container {{ padding-top:1.4rem; padding-bottom:3rem; max-width:1440px;
-  animation: fadeIn .45s ease; }}
-@keyframes fadeIn {{ from{{opacity:0; transform:translateY(6px);}} to{{opacity:1; transform:none;}} }}
+.block-container {{ padding-top:1.2rem; padding-bottom:3.2rem; max-width:1460px;
+  animation:fadeIn .42s ease; }}
+@keyframes fadeIn {{ from{{opacity:0; transform:translateY(7px);}} to{{opacity:1; transform:none;}} }}
 
 h1,h2,h3,h4 {{ letter-spacing:-0.015em; color:var(--ink); }}
-a {{ color:var(--teal) !important; }}
-.mono {{ font-family:var(--mono); text-transform:uppercase; letter-spacing:0.09em; }}
+a {{ color:var(--acento) !important; }}
+hr, [data-testid="stDivider"] {{ border-color:var(--line) !important; }}
+code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
+  padding:1px 5px; }}
+
+/* --- Navegacion superior --- */
+[data-testid="stNavigationMenu"] {{ border-bottom:1px solid var(--line);
+  padding-bottom:2px; }}
+[data-testid="stNavigationMenu"] a, header [role="tablist"] a {{
+  border-radius:9px 9px 0 0; font-weight:650; color:var(--ink-2); }}
+[data-testid="stNavigationMenu"] a:hover {{ background:rgba(34,211,238,0.09);
+  color:var(--ink); }}
+[data-testid="stNavigationMenu"] a[aria-current="page"] {{
+  color:var(--acento) !important;
+  background:linear-gradient(180deg, rgba(34,211,238,0.14), rgba(34,211,238,0.02));
+  box-shadow:inset 0 -2px 0 var(--acento); }}
 
 /* --- Tarjetas: metricas, graficos, tablas, contenedores --- */
 [data-testid="stMetric"],
@@ -57,52 +78,57 @@ a {{ color:var(--teal) !important; }}
 [data-testid="stMetric"] {{ padding:15px 17px 13px; }}
 [data-testid="stPlotlyChart"] {{ padding:10px 12px 6px; }}
 [data-testid="stMetricLabel"] p {{ color:var(--muted); font-size:0.7rem;
-  font-family:var(--mono); text-transform:uppercase; letter-spacing:0.07em; font-weight:600; }}
-[data-testid="stMetricValue"] {{ font-variant-numeric:tabular-nums; color:var(--ink); font-weight:700; }}
+  font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em;
+  font-weight:600; }}
+[data-testid="stMetricValue"] {{ font-variant-numeric:tabular-nums; color:var(--ink);
+  font-weight:700; }}
 
 /* --- Barra lateral --- */
-[data-testid="stSidebar"] {{ background:#ffffff; border-right:1px solid var(--line); }}
+[data-testid="stSidebar"] {{ background:linear-gradient(180deg, #0c1526, #0a1120);
+  border-right:1px solid var(--line); }}
 [data-testid="stSidebar"] .block-container {{ padding-top:1rem; }}
-[data-testid="stSidebarNav"] a {{ border-radius:9px; }}
-[data-testid="stSidebarNav"] a:hover {{ background:rgba(14,165,164,0.08); }}
-[data-testid="stSidebarNav"] [aria-current="page"] {{
-  background:linear-gradient(90deg, rgba(14,165,164,0.16), rgba(14,165,164,0.03));
-  box-shadow:inset 3px 0 0 var(--teal); }}
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{ font-size:0.98rem; }}
 
-/* --- Cabecera (hero) refinada --- */
-.hero {{ position:relative; overflow:hidden; background:var(--card);
-  border:1px solid var(--line); border-radius:16px; padding:20px 24px; margin-bottom:18px;
-  box-shadow:var(--shadow); }}
+/* --- Cabecera (hero) --- */
+.hero {{ position:relative; overflow:hidden;
+  background:linear-gradient(135deg, #12203a 0%, var(--card) 52%);
+  border:1px solid var(--line); border-radius:16px; padding:21px 26px;
+  margin-bottom:18px; box-shadow:var(--shadow); }}
 .hero::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
-  background:linear-gradient(180deg, var(--teal), #22d3ee); }}
-.hero::after {{ content:""; position:absolute; right:-40px; top:-60px; width:240px; height:240px;
-  background:radial-gradient(circle, rgba(14,165,164,0.10), transparent 70%); pointer-events:none; }}
-.hero .h-title {{ font-size:1.55rem; font-weight:800; line-height:1.14; color:var(--ink);
+  background:linear-gradient(180deg, var(--acento), {viz.SERIE[0]}); }}
+.hero::after {{ content:""; position:absolute; right:-50px; top:-70px;
+  width:270px; height:270px;
+  background:radial-gradient(circle, rgba(34,211,238,0.16), transparent 70%);
+  pointer-events:none; }}
+.hero .h-title {{ font-size:1.56rem; font-weight:800; line-height:1.14;
+  color:var(--ink); position:relative; }}
+.hero .h-sub {{ font-size:0.95rem; color:var(--ink-2); margin-top:5px;
+  position:relative; max-width:74ch; }}
+.hero .h-badges {{ margin-top:14px; display:flex; flex-wrap:wrap; gap:8px;
   position:relative; }}
-.hero .h-sub {{ font-size:0.96rem; color:var(--ink-2); margin-top:4px; position:relative; }}
-.hero .h-badges {{ margin-top:13px; display:flex; flex-wrap:wrap; gap:8px; position:relative; }}
-.hero .badge {{ font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em;
-  font-size:0.68rem; font-weight:600; color:var(--teal-d);
-  background:rgba(14,165,164,0.09); border:1px solid rgba(14,165,164,0.25);
+.hero .badge {{ font-family:var(--mono); text-transform:uppercase;
+  letter-spacing:0.07em; font-size:0.67rem; font-weight:600; color:#67e8f9;
+  background:rgba(34,211,238,0.10); border:1px solid rgba(34,211,238,0.28);
   padding:4px 10px; border-radius:7px; }}
 
-/* --- Chips de estadistica (mono, tipo ChurnSense) --- */
-.stat-strip {{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }}
+/* --- Chips de estadistica --- */
+.stat-strip {{ display:flex; gap:10px; flex-wrap:wrap; }}
 .stat {{ background:var(--card); border:1px solid var(--line); border-radius:10px;
-  padding:8px 14px; min-width:96px; box-shadow:var(--shadow); }}
+  padding:8px 14px; min-width:98px; box-shadow:var(--shadow); }}
 .stat .k {{ font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em;
-  font-size:0.62rem; color:var(--muted); font-weight:600; }}
-.stat .v {{ font-family:var(--mono); font-size:0.98rem; color:var(--ink); font-weight:700;
-  margin-top:2px; }}
+  font-size:0.61rem; color:var(--muted); font-weight:600; }}
+.stat .v {{ font-family:var(--mono); font-size:0.98rem; color:var(--ink);
+  font-weight:700; margin-top:2px; }}
 
 /* --- Encabezado de seccion --- */
-.section-h {{ display:flex; align-items:center; gap:10px; margin:24px 0 6px; }}
+.section-h {{ display:flex; align-items:center; gap:10px; margin:26px 0 6px; }}
 .section-h .bar {{ width:4px; height:20px; border-radius:3px;
-  background:linear-gradient(180deg, var(--teal), #22d3ee); }}
-.section-h .t {{ font-size:1.14rem; font-weight:750; color:var(--ink); }}
+  background:linear-gradient(180deg, var(--acento), {viz.SERIE[0]}); }}
+.section-h .t {{ font-size:1.13rem; font-weight:750; color:var(--ink); }}
 .section-h .tag {{ margin-left:auto; font-family:var(--mono); text-transform:uppercase;
-  letter-spacing:0.08em; font-size:0.64rem; color:var(--muted); font-weight:600; }}
-.section-desc {{ color:var(--ink-2); font-size:0.89rem; margin:0 0 10px 14px; }}
+  letter-spacing:0.08em; font-size:0.63rem; color:var(--muted); font-weight:600; }}
+.section-desc {{ color:var(--ink-2); font-size:0.88rem; margin:0 0 10px 14px;
+  max-width:96ch; }}
 
 /* --- Tira de KPIs --- */
 .kpi-strip {{ display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 4px; }}
@@ -111,46 +137,66 @@ a {{ color:var(--teal) !important; }}
   display:flex; align-items:center; gap:12px; box-shadow:var(--shadow);
   transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease; }}
 .kpi::before {{ content:""; position:absolute; top:0; left:0; right:0; height:3px;
-  background:linear-gradient(90deg, var(--accent,var(--teal)), transparent 88%); }}
-.kpi:hover {{ transform:translateY(-2px);
-  border-color:color-mix(in srgb, var(--accent,var(--teal)) 45%, var(--line));
-  box-shadow:0 10px 30px rgba(15,23,42,0.10); }}
+  background:linear-gradient(90deg, var(--accent,var(--acento)), transparent 88%); }}
+.kpi:hover {{ transform:translateY(-2px); border-color:var(--line-2);
+  box-shadow:0 14px 36px rgba(0,0,0,0.5); }}
 .kpi .ico {{ width:40px; height:40px; flex:0 0 40px; border-radius:11px;
-  display:flex; align-items:center; justify-content:center; font-size:1.2rem;
-  background:color-mix(in srgb, var(--accent,var(--teal)) 12%, white);
-  border:1px solid color-mix(in srgb, var(--accent,var(--teal)) 28%, transparent); }}
-.kpi .lbl {{ color:var(--muted); font-family:var(--mono); font-size:0.64rem;
-  text-transform:uppercase; letter-spacing:0.07em; font-weight:600; }}
-.kpi .val {{ color:var(--ink); font-size:1.34rem; font-weight:800;
+  display:flex; align-items:center; justify-content:center; font-size:1.18rem;
+  background:color-mix(in srgb, var(--accent,var(--acento)) 18%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent,var(--acento)) 34%, transparent); }}
+.kpi .lbl {{ color:var(--muted); font-family:var(--mono); font-size:0.63rem;
+  text-transform:uppercase; letter-spacing:0.08em; font-weight:600; }}
+.kpi .val {{ color:var(--ink); font-size:1.33rem; font-weight:800;
   font-variant-numeric:tabular-nums; line-height:1.18; }}
-.kpi .sub {{ color:var(--ink-2); font-size:0.73rem; }}
+.kpi .sub {{ color:var(--ink-2); font-size:0.72rem; }}
 
-/* --- Callout (recomendacion) --- */
-.callout {{ background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.28);
-  border-left:4px solid #f59e0b; border-radius:10px; padding:12px 15px; color:var(--ink);
-  font-size:0.92rem; }}
+/* --- Callout --- */
+.callout {{ background:rgba(250,178,25,0.09); border:1px solid rgba(250,178,25,0.3);
+  border-left:4px solid var(--aviso); border-radius:10px; padding:12px 15px;
+  color:var(--ink); font-size:0.91rem; }}
+
+/* --- Aviso de datos simulados --- */
+.sim-banner {{ display:flex; align-items:flex-start; gap:12px;
+  background:linear-gradient(90deg, rgba(250,178,25,0.13), rgba(250,178,25,0.03));
+  border:1px solid rgba(250,178,25,0.34); border-left:4px solid var(--aviso);
+  border-radius:11px; padding:12px 16px; margin:6px 0 14px; }}
+.sim-banner .ico {{ font-size:1.15rem; line-height:1.3; }}
+.sim-banner .t {{ font-family:var(--mono); text-transform:uppercase;
+  letter-spacing:0.08em; font-size:0.64rem; font-weight:700; color:var(--aviso); }}
+.sim-banner .d {{ color:var(--ink-2); font-size:0.87rem; margin-top:3px; }}
 
 /* --- Pestanas --- */
 [data-baseweb="tab-list"] {{ gap:6px; border-bottom:1px solid var(--line); }}
 [data-baseweb="tab"] {{ font-weight:650; color:var(--ink-2); }}
-[data-baseweb="tab"][aria-selected="true"] {{ color:var(--teal-d); }}
-[data-baseweb="tab-highlight"] {{ background:var(--teal) !important; height:3px; }}
+[data-baseweb="tab"][aria-selected="true"] {{ color:var(--acento); }}
+[data-baseweb="tab-highlight"] {{ background:var(--acento) !important; height:3px; }}
 
 /* --- Botones --- */
-.stButton button, [data-testid="stFormSubmitButton"] button {{ border-radius:10px; font-weight:650; }}
+.stButton button, [data-testid="stFormSubmitButton"] button {{ border-radius:10px;
+  font-weight:650; border-color:var(--line-2); }}
 .stButton button[kind="primary"], [data-testid="stFormSubmitButton"] button[kind="primary"] {{
-  background:linear-gradient(120deg, var(--teal), #14b8a6); border:none;
-  box-shadow:0 5px 16px rgba(14,165,164,0.30); }}
+  background:linear-gradient(120deg, var(--acento), {viz.SERIE[0]}); border:none;
+  color:#05121c; box-shadow:0 6px 18px rgba(34,211,238,0.26); }}
 
-/* --- Formulario / inputs --- */
+/* --- Sliders: el control principal del panel de prediccion --- */
+[data-testid="stSlider"] [data-baseweb="slider"] div[role="slider"] {{
+  box-shadow:0 0 0 3px rgba(34,211,238,0.22); }}
+[data-testid="stSlider"] label, [data-testid="stNumberInput"] label,
+[data-testid="stSelectbox"] label {{ font-weight:600; color:var(--ink-2); }}
+
+/* --- Formulario / inputs / alertas --- */
 [data-testid="stForm"] {{ border:1px solid var(--line); border-radius:var(--radius);
   background:var(--card); box-shadow:var(--shadow); }}
 [data-testid="stAlert"] {{ border-radius:11px; border:1px solid var(--line); }}
+[data-testid="stExpander"] details {{ background:var(--card);
+  border:1px solid var(--line); border-radius:var(--radius); }}
 
 /* --- Scroll --- */
 ::-webkit-scrollbar {{ width:11px; height:11px; }}
-::-webkit-scrollbar-thumb {{ background:#cbd5e1; border-radius:8px; border:2px solid var(--bg); }}
-::-webkit-scrollbar-thumb:hover {{ background:#94a3b8; }}
+::-webkit-scrollbar-track {{ background:var(--plano); }}
+::-webkit-scrollbar-thumb {{ background:#243248; border-radius:8px;
+  border:2px solid var(--plano); }}
+::-webkit-scrollbar-thumb:hover {{ background:#33455f; }}
 </style>
 """
 
@@ -169,7 +215,7 @@ def apply_base_style():
 
 
 def hero(title: str, subtitle: str = "", badges: list[str] | None = None):
-    """Cabecera refinada con acento turquesa."""
+    """Cabecera de panel con acento de marca."""
     badges_html = ""
     if badges:
         chips = "".join(f'<span class="badge">{b}</span>' for b in badges)
@@ -208,7 +254,7 @@ def kpi_row(items: list[dict]):
     """Tira de tarjetas KPI. Cada item: {label, value, icon?, sub?, accent?}."""
     cards = []
     for it in items:
-        accent = it.get("accent", TEAL)
+        accent = it.get("accent", ACENTO)
         ico = f'<div class="ico">{it["icon"]}</div>' if it.get("icon") else ""
         sub = f'<div class="sub">{it["sub"]}</div>' if it.get("sub") else ""
         cards.append(
@@ -217,3 +263,26 @@ def kpi_row(items: list[dict]):
             f'<div class="val">{it["value"]}</div>{sub}</div></div>'
         )
     st.markdown(f'<div class="kpi-strip">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def banner_simulacion(res: dict, detalle: str = ""):
+    """Aviso permanente de que parte del periodo mostrado NO es dato real.
+
+    'res' es lo que devuelve src.simulation.resumen(). Si no hay extension
+    simulada no dibuja nada.
+    """
+    if not res.get("tiene_simulacion"):
+        return
+    texto = detalle or (
+        f"Los registros desde <b>{res['desde']:%d/%m/%Y}</b> hasta "
+        f"<b>{res['hasta']:%d/%m/%Y}</b> ({res['filas_simuladas']:,} filas de "
+        f"{res['distritos']} distritos) fueron <b>generados por simulacion "
+        f"estacional</b>, no son notificaciones del MINSA. La vigilancia real "
+        f"publicada termina en {res['ultimo_ano_real']}."
+    )
+    st.markdown(
+        f'<div class="sim-banner"><div class="ico">⚠️</div><div>'
+        f'<div class="t">Datos simulados en el periodo reciente</div>'
+        f'<div class="d">{texto}</div></div></div>',
+        unsafe_allow_html=True,
+    )

@@ -300,6 +300,50 @@ def shap_explainer(pipeline: Pipeline):
     return shap.TreeExplainer(pipeline.named_steps["clf"])
 
 
+def _clase_positiva(sv, base=None):
+    """Normaliza la salida de SHAP a la clase 1 (alta incidencia).
+
+    Segun el modelo y la version de shap, shap_values devuelve una lista por
+    clase, un array 3D (n, features, clases) o directamente el array 2D.
+    """
+    if isinstance(sv, list):
+        sv, base = sv[1], (base[1] if base is not None else None)
+    elif getattr(sv, "ndim", 2) == 3:
+        sv = sv[:, :, 1]
+        if base is not None and np.ndim(base):
+            base = base[1]
+    return np.asarray(sv), base
+
+
+def nombres_legibles(pipeline: Pipeline) -> list[str]:
+    """Nombres de features sin el prefijo del ColumnTransformer."""
+    return [n.split("__")[-1].replace("_", " ") for n in transformed_feature_names(pipeline)]
+
+
+def crear_explainer(pipeline: Pipeline, nombre: str, fondo: pd.DataFrame | None = None):
+    """Explicador SHAP exacto para el modelo indicado, o None si no aplica.
+
+    TreeExplainer para los modelos de arbol y LinearExplainer para la regresion
+    logistica (asi el mejor modelo por F1 tambien queda explicado). Es costoso de
+    construir: conviene cachearlo.
+    """
+    import shap
+
+    clf = pipeline.named_steps["clf"]
+    if nombre in MODELOS_ARBOL:
+        return shap.TreeExplainer(clf)
+    if nombre == "logistic_regression" and fondo is not None:
+        # En un modelo lineal SHAP es exacto: coeficiente x (valor - media del fondo)
+        return shap.LinearExplainer(clf, transform_X(pipeline, fondo))
+    return None
+
+
+def valores_shap(explainer, pipeline: Pipeline, X) -> np.ndarray:
+    """Valores SHAP de la clase 1 (alta incidencia) para las filas X."""
+    sv, _ = _clase_positiva(explainer.shap_values(transform_X(pipeline, X)))
+    return sv
+
+
 # ---------------------------------------------------------------------------
 # Construccion de features para una prediccion desde el navegador (Panel 2)
 # ---------------------------------------------------------------------------

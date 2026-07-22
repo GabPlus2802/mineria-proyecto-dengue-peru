@@ -1,10 +1,11 @@
-# Tema claro elegante (estetica tipo ChurnSense: acento turquesa, superficies claras).
+# Tema oscuro "sala de vigilancia epidemiologica".
+# Los mismos valores viven en src/visualizations.py (graficos) y src/ui.py (CSS).
 [theme]
-base = "light"
-primaryColor = "#0ea5a4"          # turquesa de acento (acciones, foco, sliders)
-backgroundColor = "#f4f7fa"       # plano de la pagina (gris muy claro)
-secondaryBackgroundColor = "#ffffff"  # tarjetas, sidebar y widgets
-textColor = "#0f172a"             # tinta principal (slate)
+base = "dark"
+primaryColor = "#22d3ee"              # acento de marca: foco, sliders, acciones
+backgroundColor = "#080e1a"           # plano de la pagina
+secondaryBackgroundColor = "#0f1829"  # tarjetas, sidebar y widgets
+textColor = "#f1f5f9"                 # tinta principal
 font = "sans serif"
 
 [server]

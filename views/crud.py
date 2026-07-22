@@ -3,11 +3,12 @@
 import pandas as pd
 import streamlit as st
 
-from src import database, loaders, ui
+from src import database, loaders, modeling, ui
 
-ui.setup_page("CRUD de consultas", "🗂️")
-ui.hero("🗂️ Panel 4 — Registro de consultas (CRUD)",
-        "Crear, listar, editar y eliminar consultas con persistencia.")
+ui.hero("🗂️ Registro de consultas",
+        "Crear, listar, editar y eliminar las consultas hechas al modelo, "
+        "con persistencia en Supabase o en una base local.",
+        badges=["CRUD completo", "Supabase / SQLite"])
 
 
 @st.cache_resource(show_spinner=False)
@@ -18,12 +19,9 @@ def _get_db():
 db = _get_db()
 modo = getattr(db, "modo", "local")
 if modo == "supabase":
-    st.success("Conectado a **Supabase** (persistencia en produccion).", icon="✅")
+    st.success("Conectado a **Supabase** (persistencia en la nube).", icon="✅")
 else:
-    st.warning(
-        "Modo **local** (SQLite) — solo para desarrollo. El despliegue final debe "
-        "configurar credenciales de Supabase en `.streamlit/secrets.toml`.", icon="⚠️",
-    )
+    st.info("Persistencia local activa (SQLite).", icon="💾")
 
 df = loaders.load_master() if loaders.artefactos_listos() else None
 
@@ -33,15 +31,19 @@ df = loaders.load_master() if loaders.artefactos_listos() else None
 ui.section("Crear consulta")
 prefill = st.session_state.get("ultima_prediccion", {})
 if prefill:
-    st.caption("Prellenado con la ultima prediccion del Panel 2.")
+    st.caption("Prellenado con el ultimo escenario simulado en **Modelo Predictivo**.")
+
+MODELOS = list(modeling.MODEL_LABELS)
 
 with st.form("crear"):
     c = st.columns(4)
     departamento = c[0].text_input("Departamento", prefill.get("departamento", ""))
     distrito = c[1].text_input("Distrito", prefill.get("distrito", ""))
     semana = c[2].number_input("Semana", 1, 53, int(prefill.get("semana", 1)))
-    modelo = c[3].selectbox("Modelo", ["random_forest", "xgboost"],
-                            index=0 if prefill.get("modelo") != "xgboost" else 1)
+    modelo = c[3].selectbox(
+        "Modelo", MODELOS,
+        index=MODELOS.index(prefill["modelo"]) if prefill.get("modelo") in MODELOS else 0,
+        format_func=lambda k: modeling.MODEL_LABELS.get(k, k))
     c2 = st.columns(2)
     prediccion = c2[0].selectbox("Prediccion", ["alta", "baja"],
                                  index=0 if prefill.get("prediccion") != "baja" else 1)

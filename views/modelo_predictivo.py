@@ -1,4 +1,4 @@
-"""Panel 2: clasificacion (RF vs XGBoost), umbral, SHAP y prediccion en vivo."""
+"""Panel 2: simulador de prediccion, comparacion de 5 modelos y explicabilidad SHAP."""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,229 +8,400 @@ import streamlit as st
 import config
 from src import loaders, modeling, ui, visualizations as viz
 
-ui.setup_page("Modelo Predictivo", "🤖")
-
 if not loaders.artefactos_listos():
     st.error("Faltan artefactos. Ejecuta `python train.py --rebuild`.")
     st.stop()
 
-ui.hero("🤖 Panel 2 — Modelo Predictivo y Explicabilidad",
-        "5 modelos comparados, umbral de decision, SHAP y prediccion en vivo.")
+ui.hero(
+    "🤖 Modelo Predictivo",
+    "Mueve las variables y observa como cambia el riesgo de alta incidencia "
+    "de la semana siguiente, con la explicacion de cada decision.",
+    badges=["5 modelos", "Prediccion en vivo", "SHAP", "Test = 2024 real"],
+)
 
 df = loaders.load_master()
+df_real = loaders.solo_real(df)
 modelos = loaders.load_models()
 meta = modelos.get("meta") or {}
 pipelines = loaders.load_clasificadores(modelos)
-data = modeling.get_modeling_frame(df)
+data = modeling.get_modeling_frame(df_real)
 
-st.markdown(
-    "**Objetivo:** predecir si un distrito superara su *alta incidencia* historica "
-    "(percentil 75 del periodo de entrenamiento) en la **semana siguiente**. "
-    f"Se comparan **{len(pipelines)} modelos** entrenados con division temporal "
-    "(test = ultimo anio, 2024)."
+umbral_defecto = float(meta.get("threshold", config.CLASSIFICATION_THRESHOLD))
+if "umbral" not in st.session_state:
+    st.session_state["umbral"] = umbral_defecto
+
+tab_sim, tab_cmp, tab_shap = st.tabs(
+    ["🎛️ Simulador de prediccion", "🏁 Comparacion de modelos", "🔍 Explicabilidad global"]
 )
 
-# ---------------------------------------------------------------------------
-# Comparacion de modelos
-# ---------------------------------------------------------------------------
-ui.section("Comparacion de modelos (test 2024)",
-           "Un modelo lineal, un arbol simple y tres ensembles compitiendo por el mejor F1.")
-umbral = st.slider("Umbral de decision", 0.1, 0.9,
-                   float(meta.get("threshold", config.CLASSIFICATION_THRESHOLD)), 0.05)
 
-tabla = modeling.metrics_table(pipelines, data["X_test"], data["y_test"], threshold=umbral)
-st.dataframe(tabla.rename(index=modeling.MODEL_LABELS), width='stretch')
-
-mejor = modeling.elegir_mejor_modelo(tabla)
-base_rate = float(data["y_test"].mean())
-ui.stat_chips([
-    {"label": "Modelo", "value": modeling.MODEL_LABELS.get(mejor, mejor)},
-    {"label": "ROC-AUC", "value": f"{tabla.loc[mejor, 'roc_auc']:.3f}"},
-    {"label": "F1", "value": f"{tabla.loc[mejor, 'f1']:.3f}"},
-    {"label": "Base rate", "value": f"{base_rate:.1%}"},
-    {"label": "Umbral", "value": f"{umbral:.2f}"},
-])
-st.write("")
-st.success(f"Mejor modelo por F1 con umbral {umbral}: **{modeling.MODEL_LABELS.get(mejor, mejor)}** "
-           f"(recall {tabla.loc[mejor,'recall']:.3f}, precision {tabla.loc[mejor,'precision']:.3f}, "
-           f"ROC-AUC {tabla.loc[mejor,'roc_auc']:.3f})")
-st.caption("El ganador no se elige solo por accuracy: se prioriza el equilibrio recall/precision (F1).")
-
-col1, col2 = st.columns(2)
-with col1:
-    m = tabla.loc[mejor]
-    st.plotly_chart(
-        viz.matriz_confusion(int(m["tn"]), int(m["fp"]), int(m["fn"]), int(m["tp"]),
-                             f"Matriz de confusion — {modeling.MODEL_LABELS.get(mejor, mejor)}"),
-        width='stretch',
-    )
-with col2:
-    sweep = modeling.threshold_sweep(pipelines[mejor], data["X_test"], data["y_test"])
-    st.plotly_chart(viz.curva_umbral(sweep), width='stretch')
-    st.caption("Efecto del umbral en precision, recall y F1.")
-
-# Metricas POR CLASE del mejor modelo
-st.markdown(f"**Metricas por clase — {modeling.MODEL_LABELS.get(mejor, mejor)}** "
-            f"(accuracy global: {tabla.loc[mejor, 'accuracy']:.3f})")
-st.dataframe(modeling.per_class_metrics(pipelines[mejor], data["X_test"],
-             data["y_test"], threshold=umbral), width='stretch')
-st.caption("Clase 1 = alta incidencia la semana siguiente (clase minoritaria en entrenamiento). "
-           "¿Que error es mas costoso? Un falso negativo (no anticipar alta incidencia) "
-           "suele ser mas grave en salud publica, por lo que se prioriza el recall de la clase 1.")
-
-# Efecto del balanceo de clases (desbalance > 80/20)
-bal = loaders.load_metricas_balanceo()
-if bal is not None:
-    ui.section("Efecto del balanceo de clases",
-               "El entrenamiento tiene desbalance ~90/10. Se aplica class_weight (RF) y "
-               "scale_pos_weight (XGBoost); aqui el efecto en el recall de la clase minoritaria.")
-    piv = bal.pivot(index="modelo", columns="estado", values="recall_clase_1")
-    piv["mejora"] = (piv["con balanceo"] - piv["sin balanceo"]).round(4)
-    st.dataframe(piv, width='stretch')
-    st.caption("recall de la clase 1 (alta incidencia) en el conjunto de prueba, sin y con balanceo.")
-
-# ---------------------------------------------------------------------------
-# SHAP
-# ---------------------------------------------------------------------------
-ui.section("Explicabilidad con SHAP",
-           "Que variables influyen en la probabilidad predicha (asociacion, no causalidad).")
-# Mejor modelo de arbol disponible (TreeExplainer). Prioriza el ganador si es de arbol.
-if mejor in modeling.MODELOS_ARBOL:
-    modelo_shap = mejor
-else:
-    modelo_shap = next((m for m in ["xgboost", "random_forest", "decision_tree"]
-                        if m in pipelines), "random_forest")
-st.caption(f"Explicando el modelo de arbol: **{modeling.MODEL_LABELS.get(modelo_shap, modelo_shap)}** "
-           "(SHAP TreeExplainer).")
+# ===========================================================================
+# Utilidades del simulador
+# ===========================================================================
+CONTROLES = [
+    ("casos", "Casos esta semana", "Notificaciones de la semana desde la que se predice."),
+    ("casos_lag_1", "Casos hace 1 semana", "Valor de la semana inmediatamente anterior."),
+    ("casos_lag_2", "Casos hace 2 semanas", "Dos semanas atras."),
+    ("casos_lag_4", "Casos hace 4 semanas", "Un mes atras: referencia de nivel."),
+    ("promedio_movil_4", "Promedio de las 4 semanas previas", "Nivel reciente del distrito."),
+    ("promedio_movil_8", "Promedio de las 8 semanas previas", "Nivel de fondo del distrito."),
+    ("desviacion_movil_4", "Variabilidad de las 4 semanas previas",
+     "Desviacion estandar: mide que tan inestable viene la serie."),
+    ("crecimiento_semanal", "Crecimiento respecto a la semana previa",
+     "(casos - casos hace 1 semana) / (casos hace 1 semana + 1)."),
+]
 
 
-@st.cache_resource(show_spinner="Calculando valores SHAP...")
-def _shap_data(nombre, n=400):
-    import shap
+def rangos_de(tope: int) -> dict:
+    """Limites y paso de cada slider: (minimo, maximo, paso, tipo).
 
-    pipe = pipelines[nombre]
-    Xs = data["X_test"].sample(min(n, len(data["X_test"])), random_state=config.RANDOM_STATE)
-    Xt = modeling.transform_X(pipe, Xs)
-    nombres = modeling.transformed_feature_names(pipe)
-    explainer = shap.TreeExplainer(pipe.named_steps["clf"])
-    sv = explainer.shap_values(Xt)
-    base = explainer.expected_value
-    # Normalizar a la clase positiva
-    if isinstance(sv, list):
-        sv, base = sv[1], base[1]
-    elif getattr(sv, "ndim", 2) == 3:
-        sv, base = sv[:, :, 1], (base[1] if np.ndim(base) else base)
-    return np.asarray(sv), np.asarray(Xt), list(nombres), float(np.ravel(base)[0])
+    El tope se deriva del maximo historico del distrito, de modo que el rango
+    del control tenga sentido para ese lugar.
+    """
+    return {
+        "casos": (0, tope, 1, int),
+        "casos_lag_1": (0, tope, 1, int),
+        "casos_lag_2": (0, tope, 1, int),
+        "casos_lag_4": (0, tope, 1, int),
+        "promedio_movil_4": (0.0, float(tope), 0.5, float),
+        "promedio_movil_8": (0.0, float(tope), 0.5, float),
+        "desviacion_movil_4": (0.0, float(max(5, tope // 2)), 0.5, float),
+        "crecimiento_semanal": (-1.0, 5.0, 0.05, float),
+        "semana": (1, 53, 1, int),
+    }
 
 
-sv, Xt, nombres, base = _shap_data(modelo_shap)
+def sembrar_estado(valores: dict, rangos: dict):
+    """Escribe los valores en session_state respetando limites y tipo.
 
-tabg, tabl = st.tabs(["Explicacion global", "Explicacion local"])
+    Sin el recorte, un valor fuera de rango (p. ej. un crecimiento mayor al
+    maximo del slider) haria fallar al widget.
+    """
+    for clave, (lo, hi, _paso, tipo) in rangos.items():
+        v = valores.get(clave, lo)
+        st.session_state[f"sl_{clave}"] = tipo(min(max(v, lo), hi))
 
-with tabg:
-    st.markdown("**Importancia global de variables** (summary plot)")
-    fig = plt.figure()
-    import shap
-    shap.summary_plot(sv, Xt, feature_names=nombres, show=False, max_display=12)
-    st.pyplot(fig, clear_figure=True)
-    st.caption("Cada punto es una observacion; el color indica el valor de la variable. "
-               "SHAP muestra asociacion con la probabilidad, no causalidad.")
 
-with tabl:
-    idx = st.number_input("Indice de la observacion a explicar", 0, len(Xt) - 1, 0)
-    import shap
-    expl = shap.Explanation(values=sv[int(idx)], base_values=base,
-                            data=Xt[int(idx)], feature_names=nombres)
-    fig2 = plt.figure()
-    shap.plots.waterfall(expl, max_display=12, show=False)
-    st.pyplot(fig2, clear_figure=True)
-    st.caption("Variables que empujan la probabilidad hacia arriba (rojo) o hacia abajo (azul).")
+def valores_del_distrito(hist: pd.DataFrame) -> dict:
+    """Valores reales de la ultima semana observada del distrito.
 
-# ---------------------------------------------------------------------------
-# Formulario de prediccion en vivo
-# ---------------------------------------------------------------------------
-ui.section("Prediccion en vivo",
-           "Selecciona un distrito; las variables derivadas (lags, medias moviles, "
-           "estacionalidad) se calculan automaticamente desde su historial.")
+    Las medias y la desviacion se calculan EXCLUYENDO la semana actual, igual
+    que en el entrenamiento (todas las moviles usan shift(1), sin fuga).
+    """
+    c = hist["casos"].tolist()
 
-with st.form("form_prediccion"):
-    c = st.columns(4)
+    def atras(n):
+        return float(c[-n]) if len(c) >= n else 0.0
+
+    previas_4 = c[-5:-1] if len(c) >= 5 else c[:-1] or [0.0]
+    previas_8 = c[-9:-1] if len(c) >= 9 else c[:-1] or [0.0]
+    lag1 = atras(2)
+    actual = atras(1)
+    return {
+        "casos": actual,
+        "casos_lag_1": lag1,
+        "casos_lag_2": atras(3),
+        "casos_lag_4": atras(5),
+        "promedio_movil_4": float(np.mean(previas_4)),
+        "promedio_movil_8": float(np.mean(previas_8)),
+        "desviacion_movil_4": float(np.std(previas_4, ddof=1)) if len(previas_4) > 1 else 0.0,
+        "crecimiento_semanal": (actual - lag1) / (lag1 + 1.0),
+        "semana": int(hist["semana"].iloc[-1]) if len(hist) else 1,
+    }
+
+
+def derivadas_desde_lags(v: dict) -> dict:
+    """Recalcula las variables derivadas a partir de los lags actuales.
+
+    El promedio de 4 semanas se aproxima con los lags 1, 2 y 4: la semana 3 no
+    es un predictor del modelo, asi que no hay un slider para ella.
+    """
+    lags = [v["casos_lag_1"], v["casos_lag_2"], v["casos_lag_4"]]
+    return {
+        **v,
+        "promedio_movil_4": float(np.mean(lags)),
+        "promedio_movil_8": float(np.mean(lags + [v["promedio_movil_8"]])),
+        "desviacion_movil_4": float(np.std(lags, ddof=1)),
+        "crecimiento_semanal": (v["casos"] - v["casos_lag_1"]) / (v["casos_lag_1"] + 1.0),
+    }
+
+
+def fila_desde_controles(v: dict, departamento: str) -> pd.DataFrame:
+    """Arma la fila de features en el orden que espera el pipeline."""
+    fila = {k: float(v[k]) for k, _, _ in CONTROLES}
+    fila["semana_sen"] = float(np.sin(2 * np.pi * v["semana"] / 52.0))
+    fila["semana_cos"] = float(np.cos(2 * np.pi * v["semana"] / 52.0))
+    fila["departamento"] = departamento
+    from src.preprocessing import FEATURE_CATEGORICAL, FEATURE_NUMERIC
+
+    return pd.DataFrame([fila])[FEATURE_NUMERIC + FEATURE_CATEGORICAL]
+
+
+@st.cache_resource(show_spinner=False)
+def explainer_de(nombre: str):
+    """Explicador SHAP cacheado (construirlo en cada rerun seria lentisimo)."""
+    fondo = data["X_train"].sample(min(200, len(data["X_train"])),
+                                   random_state=config.RANDOM_STATE)
+    return modeling.crear_explainer(pipelines[nombre], nombre, fondo)
+
+
+# ===========================================================================
+# TAB 1 — Simulador de prediccion
+# ===========================================================================
+with tab_sim:
+    ui.section("1. Elige el punto de partida",
+               "Los sliders se precargan con los valores reales de la ultima semana "
+               "registrada del distrito. A partir de ahi puedes mover cada variable.")
+
+    c = st.columns([1.1, 1.4, 1.2, 1.3])
     dep = c[0].selectbox("Departamento", sorted(df["departamento"].unique()))
     dist_df = loaders.distritos_de(df, dep)
     dist_nombre = c[1].selectbox("Distrito", dist_df["distrito"].tolist())
     ubigeo = dist_df.loc[dist_df["distrito"] == dist_nombre, "ubigeo"].iloc[0]
 
-    hist = df[df["ubigeo"].astype(str) == str(ubigeo)].sort_values("week_id")
-    ultimo_casos = int(hist["casos"].iloc[-1]) if len(hist) else 0
-    ultima_semana = int(hist["semana"].iloc[-1]) if len(hist) else 1
-
-    casos_actual = c[2].number_input("Casos semana actual", 0, 5000, ultimo_casos)
-    semana = c[3].number_input("Semana epidemiologica", 1, 53, ultima_semana)
     opciones = list(pipelines)
-    modelo_pred = st.radio("Modelo", opciones,
-                           index=opciones.index(mejor) if mejor in opciones else 0,
-                           format_func=lambda k: modeling.MODEL_LABELS.get(k, k),
-                           horizontal=True)
-    enviar = st.form_submit_button("Predecir", type="primary")
+    mejor_guardado = meta.get("mejor_modelo", opciones[0])
+    modelo_pred = c[2].selectbox(
+        "Modelo", opciones,
+        index=opciones.index(mejor_guardado) if mejor_guardado in opciones else 0,
+        format_func=lambda k: modeling.MODEL_LABELS.get(k, k),
+    )
+    umbral = c[3].slider("Umbral de decision", min_value=0.05, max_value=0.95,
+                         step=0.05, key="umbral",
+                         help="Probabilidad a partir de la cual se declara riesgo alto. "
+                              "Bajarlo detecta mas brotes pero genera mas falsas alarmas.")
 
-if enviar:
-    if len(hist) < 4:
-        st.warning("El distrito tiene muy poco historial para una prediccion confiable.")
-    else:
-        fila = modeling.construir_fila_prediccion(hist, casos_actual, semana, dep)
-        pipe = pipelines[modelo_pred]
-        proba = float(pipe.predict_proba(fila)[0, 1])
-        pred = int(proba >= umbral)
+    hist = df[df["ubigeo"].astype(str) == str(ubigeo)].sort_values("week_id")
 
-        col_g, col_r = st.columns([1, 1.35], gap="large")
-        with col_g:
-            st.plotly_chart(viz.medidor_probabilidad(proba, umbral,
-                            "Probabilidad de alta incidencia"), width='stretch')
-        with col_r:
-            estado = "Riesgo ALTO" if pred else "Riesgo bajo"
-            desc = ("El perfil se acerca al comportamiento de alta incidencia."
-                    if pred else "El perfil se aleja del comportamiento de alta incidencia.")
-            ui.kpi_row([
-                {"label": "Estado", "value": estado, "icon": "🚨" if pred else "✅",
-                 "accent": "#ef4444" if pred else "#16a34a"},
-                {"label": "Modelo", "value": modeling.MODEL_LABELS.get(modelo_pred, modelo_pred),
-                 "icon": "🤖", "accent": "#0ea5a4"},
-            ])
-            st.write("")
-            if pred:
-                ui.callout("<b>Vigilar.</b> Reforzar prevencion y monitoreo del distrito "
-                           "en las proximas semanas.")
-            else:
-                ui.callout("<b>Mantener.</b> Sin accion prioritaria; seguir el monitoreo "
-                           "en el ciclo normal.")
-            st.caption(desc)
+    if len(hist) < 6:
+        st.warning("Este distrito tiene muy poco historial para simular una prediccion. "
+                   "Elige otro distrito.")
+        st.stop()
 
-        # Contribucion de cada variable (SHAP local, estilo force plot) para arboles
-        if modelo_pred in modeling.MODELOS_ARBOL:
-            import shap
-            Xt1 = modeling.transform_X(pipe, fila)
-            nombres1 = [n.split("__")[-1].replace("_", " ")
-                        for n in modeling.transformed_feature_names(pipe)]
-            expl1 = shap.TreeExplainer(pipe.named_steps["clf"])
-            sv1 = expl1.shap_values(Xt1)
-            if isinstance(sv1, list):
-                sv1 = sv1[1]
-            elif getattr(sv1, "ndim", 2) == 3:
-                sv1 = sv1[:, :, 1]
-            ui.section("Contribucion de cada variable", tag="valores SHAP · este cliente")
-            st.plotly_chart(viz.barras_contribucion_shap(nombres1, np.asarray(sv1)[0]),
-                            width='stretch')
-            st.caption("Coral = empuja hacia ALTA incidencia · turquesa = empuja hacia baja. "
-                       "SHAP muestra asociacion, no causalidad.")
+    reales = valores_del_distrito(hist)
+    tope = max(20, int(np.ceil(hist["casos"].max() * 1.5 / 10) * 10))
+    rangos = rangos_de(tope)
+
+    # --- Estado de los sliders -------------------------------------------
+    # Al cambiar de distrito se recargan los valores reales de ese lugar.
+    if st.session_state.get("_ubigeo_sim") != ubigeo:
+        st.session_state["_ubigeo_sim"] = ubigeo
+        sembrar_estado(reales, rangos)
+
+    b = st.columns([1, 1, 3])
+    if b[0].button("↺ Volver a los valores reales", width='stretch'):
+        sembrar_estado(reales, rangos)
+        st.rerun()
+    if b[1].button("⚙️ Sincronizar derivadas", width='stretch',
+                   help="Recalcula promedios, variabilidad y crecimiento a partir de los "
+                        "lags que tienes puestos, para que el escenario sea coherente."):
+        actual = {k: st.session_state[f"sl_{k}"] for k in rangos}
+        sembrar_estado(derivadas_desde_lags(actual), rangos)
+        st.rerun()
+
+    ui.section("2. Mueve las variables", tag="− izquierda · + derecha")
+
+    izq, der = st.columns(2, gap="large")
+    valores = {}
+    for i, (clave, etiqueta, ayuda) in enumerate(CONTROLES):
+        lo, hi, paso, _tipo = rangos[clave]
+        col = izq if i % 2 == 0 else der
+        with col:
+            # El valor inicial viaja por session_state, no por el argumento
+            # 'value': pasar ambos hace que Streamlit ignore uno y avise.
+            valores[clave] = float(st.slider(etiqueta, min_value=lo, max_value=hi,
+                                             step=paso, help=ayuda, key=f"sl_{clave}"))
+
+    valores["semana"] = st.slider(
+        "Semana epidemiologica", min_value=1, max_value=53, step=1, key="sl_semana",
+        help="Define la estacionalidad. El modelo la recibe como seno y coseno "
+             "para que la semana 53 quede junto a la semana 1.",
+    )
+
+    sen = np.sin(2 * np.pi * valores["semana"] / 52.0)
+    cos = np.cos(2 * np.pi * valores["semana"] / 52.0)
+    st.caption(f"Variables derivadas de la semana — semana_sen = `{sen:+.3f}` · "
+               f"semana_cos = `{cos:+.3f}`  (no se editan a mano: dependen de la semana)")
+
+    # --- Prediccion en vivo ----------------------------------------------
+    fila = fila_desde_controles(valores, dep)
+    pipe = pipelines[modelo_pred]
+    proba = float(pipe.predict_proba(fila)[0, 1])
+    pred = int(proba >= umbral)
+
+    ui.section("3. Resultado", tag="se actualiza al mover cualquier slider")
+
+    col_g, col_r = st.columns([1, 1.4], gap="large")
+    with col_g:
+        st.plotly_chart(viz.medidor_probabilidad(proba, umbral,
+                        "Probabilidad de alta incidencia"), width='stretch')
+    with col_r:
+        estado = "RIESGO ALTO" if pred else "RIESGO BAJO"
+        base_hist = float(reales["casos"])
+        ui.kpi_row([
+            {"label": "Estado", "value": estado, "icon": "🚨" if pred else "✅",
+             "accent": viz.CRITICO if pred else viz.BUENO},
+            {"label": "Probabilidad", "value": f"{proba:.1%}", "icon": "🎯",
+             "accent": viz.SERIE[0], "sub": f"umbral {umbral:.2f}"},
+            {"label": "Modelo", "value": modeling.MODEL_LABELS.get(modelo_pred, modelo_pred),
+             "icon": "🤖", "accent": viz.ACENTO},
+        ])
+        st.write("")
+        if pred:
+            ui.callout(
+                "<b>Vigilar.</b> El perfil se parece al de las semanas que "
+                "precedieron a una alta incidencia. Reforzar prevencion y "
+                "monitoreo del distrito.")
         else:
-            st.caption("La explicacion local SHAP (TreeExplainer) esta disponible para los "
-                       "modelos de arbol (Random Forest, XGBoost, Arbol de Decision).")
+            ui.callout(
+                "<b>Mantener.</b> El perfil se aleja del comportamiento de alta "
+                "incidencia. Seguir el monitoreo en el ciclo normal.")
+        umbral_dist = hist["umbral_incidencia"].dropna()
+        if len(umbral_dist):
+            st.caption(
+                f"Umbral historico de alta incidencia en {dist_nombre}: "
+                f"**{float(umbral_dist.iloc[-1]):.1f} casos/semana** "
+                f"(percentil {config.TARGET_PERCENTILE} del periodo de entrenamiento). "
+                f"Ultima semana registrada: {base_hist:.0f} casos.")
+        else:
+            st.caption(f"Ultima semana registrada en {dist_nombre}: {base_hist:.0f} casos.")
 
-        st.session_state["ultima_prediccion"] = {
-            "departamento": dep, "distrito": dist_nombre, "semana": int(semana),
-            "datos_entrada": {"casos_actual": int(casos_actual), "semana": int(semana)},
-            "modelo": modelo_pred, "prediccion": "alta" if pred else "baja",
-            "probabilidad": round(proba, 4),
-        }
-        st.info("Prediccion guardada en memoria: puedes registrarla en el **Panel 4 (CRUD)**.",
-                icon="💾")
+    # --- Explicabilidad de ESTA prediccion --------------------------------
+    ui.section("4. Por que esta prediccion", tag="valores SHAP · este escenario")
+    explainer = explainer_de(modelo_pred)
+    if explainer is None:
+        st.info(
+            f"**{modeling.MODEL_LABELS.get(modelo_pred, modelo_pred)}** no tiene un "
+            "explicador SHAP exacto en este proyecto. Elige Random Forest, XGBoost, "
+            "Arbol de Decision o Regresion Logistica para ver la contribucion de "
+            "cada variable.", icon="ℹ️")
+    else:
+        sv = modeling.valores_shap(explainer, pipe, fila)
+        st.plotly_chart(
+            viz.barras_contribucion_shap(modeling.nombres_legibles(pipe), sv[0]),
+            width='stretch')
+        st.caption(
+            "Rojo = empuja hacia ALTA incidencia · azul = empuja hacia baja. "
+            "La longitud es cuanto mueve la prediccion (log-odds) y el numero "
+            "acompana a cada barra, asi el signo no depende solo del color. "
+            "SHAP muestra asociacion, no causalidad.")
+
+    st.session_state["ultima_prediccion"] = {
+        "departamento": dep, "distrito": dist_nombre, "semana": int(valores["semana"]),
+        "datos_entrada": {k: round(float(valores[k]), 3) for k, _, _ in CONTROLES},
+        "modelo": modelo_pred, "prediccion": "alta" if pred else "baja",
+        "probabilidad": round(proba, 4),
+    }
+    st.info("Este escenario queda disponible para registrarlo en **Datos (CRUD)**.",
+            icon="💾")
+
+
+# ===========================================================================
+# TAB 2 — Comparacion de modelos
+# ===========================================================================
+with tab_cmp:
+    ui.section("Comparacion de modelos", "Division temporal: entrenamiento hasta 2022, "
+               "validacion 2023 y prueba 2024. Solo datos reales del MINSA.")
+    st.markdown(
+        "**Objetivo:** predecir si un distrito superara su *alta incidencia* historica "
+        f"(percentil {config.TARGET_PERCENTILE} del periodo de entrenamiento) en la "
+        f"**semana siguiente**. Se comparan **{len(pipelines)} modelos**.")
+
+    umbral_cmp = st.slider("Umbral de decision para la tabla", 0.1, 0.9,
+                           umbral_defecto, 0.05, key="umbral_cmp")
+    tabla = modeling.metrics_table(pipelines, data["X_test"], data["y_test"],
+                                   threshold=umbral_cmp)
+    st.dataframe(tabla.rename(index=modeling.MODEL_LABELS), width='stretch')
+
+    mejor = modeling.elegir_mejor_modelo(tabla)
+    ui.stat_chips([
+        {"label": "Mejor por F1", "value": modeling.MODEL_LABELS.get(mejor, mejor)},
+        {"label": "F1", "value": f"{tabla.loc[mejor, 'f1']:.3f}"},
+        {"label": "ROC-AUC", "value": f"{tabla.loc[mejor, 'roc_auc']:.3f}"},
+        {"label": "Recall", "value": f"{tabla.loc[mejor, 'recall']:.3f}"},
+        {"label": "Base rate", "value": f"{float(data['y_test'].mean()):.1%}"},
+        {"label": "Umbral", "value": f"{umbral_cmp:.2f}"},
+    ])
+    st.caption("El ganador no se elige por accuracy: se prioriza el equilibrio "
+               "entre recall y precision (F1).")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        m = tabla.loc[mejor]
+        st.plotly_chart(
+            viz.matriz_confusion(int(m["tn"]), int(m["fp"]), int(m["fn"]), int(m["tp"]),
+                                 f"Matriz de confusion — {modeling.MODEL_LABELS.get(mejor, mejor)}"),
+            width='stretch')
+    with col2:
+        sweep = modeling.threshold_sweep(pipelines[mejor], data["X_test"], data["y_test"])
+        st.plotly_chart(viz.curva_umbral(sweep), width='stretch')
+
+    ui.section("Metricas por clase", f"{modeling.MODEL_LABELS.get(mejor, mejor)} — "
+               f"accuracy global {tabla.loc[mejor, 'accuracy']:.3f}")
+    st.dataframe(modeling.per_class_metrics(pipelines[mejor], data["X_test"],
+                 data["y_test"], threshold=umbral_cmp), width='stretch')
+    st.caption("Clase 1 = alta incidencia la semana siguiente (minoritaria en "
+               "entrenamiento). Un falso negativo —no anticipar alta incidencia— "
+               "suele ser mas costoso en salud publica, por eso se prioriza su recall.")
+
+    bal = loaders.load_metricas_balanceo()
+    if bal is not None:
+        ui.section("Efecto del balanceo de clases",
+                   "El entrenamiento tiene desbalance ~90/10. Se aplica class_weight (RF) "
+                   "y scale_pos_weight (XGBoost); aqui el efecto sobre la clase minoritaria.")
+        piv = bal.pivot(index="modelo", columns="estado", values="recall_clase_1")
+        piv["mejora"] = (piv["con balanceo"] - piv["sin balanceo"]).round(4)
+        st.dataframe(piv, width='stretch')
+
+
+# ===========================================================================
+# TAB 3 — Explicabilidad global
+# ===========================================================================
+with tab_shap:
+    ui.section("Importancia global de variables",
+               "Que variables mueven la probabilidad en el conjunto de prueba "
+               "(asociacion, no causalidad).")
+
+    disponibles = [m for m in pipelines
+                   if m in modeling.MODELOS_ARBOL or m == "logistic_regression"]
+    modelo_shap = st.selectbox(
+        "Modelo a explicar", disponibles,
+        format_func=lambda k: modeling.MODEL_LABELS.get(k, k), key="shap_global")
+
+    @st.cache_resource(show_spinner="Calculando valores SHAP...")
+    def _shap_global(nombre, n=400):
+        pipe_g = pipelines[nombre]
+        Xs = data["X_test"].sample(min(n, len(data["X_test"])),
+                                   random_state=config.RANDOM_STATE)
+        expl = explainer_de(nombre)
+        sv = modeling.valores_shap(expl, pipe_g, Xs)
+        return np.asarray(sv), modeling.transform_X(pipe_g, Xs), modeling.nombres_legibles(pipe_g)
+
+    sv_g, Xt_g, nombres_g = _shap_global(modelo_shap)
+
+    col_a, col_b = st.columns([1.25, 1], gap="large")
+    with col_a:
+        st.markdown("**Summary plot** — cada punto es una observacion del conjunto de prueba.")
+        import shap
+
+        fig = plt.figure(figsize=(7, 5))
+        shap.summary_plot(sv_g, Xt_g, feature_names=nombres_g, show=False, max_display=12)
+        fig.patch.set_alpha(0)
+        ax = plt.gca()
+        ax.set_facecolor("none")
+        ax.tick_params(colors=viz.TINTA_2)
+        for lado in ax.spines.values():
+            lado.set_color(viz.EJE)
+        ax.xaxis.label.set_color(viz.TINTA_2)
+        st.pyplot(fig, clear_figure=True, transparent=True)
+
+    with col_b:
+        st.markdown("**Importancia media** — magnitud promedio del efecto.")
+        importancia = np.abs(sv_g).mean(axis=0)
+        st.plotly_chart(
+            viz.barras_contribucion_shap(nombres_g, importancia,
+                                         titulo="|SHAP| promedio", top=12),
+            width='stretch')
+
+    st.caption("El color de cada punto en el summary plot indica el valor de la variable. "
+               "SHAP muestra asociacion con la probabilidad predicha, no causalidad.")
