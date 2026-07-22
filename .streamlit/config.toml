@@ -1,11 +1,11 @@
-# Tema oscuro "sala de vigilancia epidemiologica".
-# Los mismos valores viven en src/visualizations.py (graficos) y src/ui.py (CSS).
+# Tema claro. Los mismos valores viven en src/visualizations.py (graficos)
+# y src/ui.py (CSS de la interfaz).
 [theme]
-base = "dark"
-primaryColor = "#22d3ee"              # acento de marca: foco, sliders, acciones
-backgroundColor = "#080e1a"           # plano de la pagina
-secondaryBackgroundColor = "#0f1829"  # tarjetas, sidebar y widgets
-textColor = "#f1f5f9"                 # tinta principal
+base = "light"
+primaryColor = "#0d9488"              # acento de marca: foco, sliders, acciones
+backgroundColor = "#f5f7fa"           # plano de la pagina
+secondaryBackgroundColor = "#ffffff"  # tarjetas, sidebar y widgets
+textColor = "#0f172a"                 # tinta principal
 font = "sans serif"
 
 [server]

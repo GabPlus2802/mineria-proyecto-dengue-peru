@@ -125,3 +125,75 @@ def resumen_clusters(perfil: pd.DataFrame) -> pd.DataFrame:
         .assign(n_distritos=perfil.groupby("cluster").size())
         .round(2)
     )
+
+
+# ---------------------------------------------------------------------------
+# Interpretacion: de "cluster 0/1/2" a un perfil epidemiologico con nombre
+# ---------------------------------------------------------------------------
+# Nombres por NIVEL de transmision, no por el numero que asigno K-means: la
+# etiqueta numerica cambia entre ejecuciones, el orden por intensidad no.
+NOMBRES_POR_NIVEL = [
+    ("Transmision esporadica",
+     "Distritos donde el dengue aparece de forma aislada: la mayoria de semanas "
+     "cierran sin ningun caso y los brotes, cuando ocurren, son pequenos y "
+     "breves. Son la mayor parte del pais."),
+    ("Transmision estacional",
+     "Distritos con presencia recurrente del vector: acumulan casos durante la "
+     "temporada de lluvias y bajan el resto del ano. El brote es predecible en "
+     "el calendario, aunque su tamano varie."),
+    ("Transmision alta y sostenida",
+     "Focos endemicos: notifican casos en buena parte del ano y concentran los "
+     "picos mas grandes del pais. Son pocos distritos, pero explican una "
+     "fraccion enorme de los casos totales."),
+    ("Transmision muy alta",
+     "Nucleo de maxima intensidad, con actividad casi continua y los brotes de "
+     "mayor magnitud registrados."),
+]
+
+
+def etiquetar_clusters(perfil: pd.DataFrame) -> pd.DataFrame:
+    """Anade nombre, descripcion y orden de intensidad a cada cluster.
+
+    Los clusters se ordenan por su promedio semanal de casos y se les asigna un
+    nombre segun ese nivel. Asi la interpretacion no depende de la etiqueta
+    numerica que haya elegido K-means en esa ejecucion.
+    """
+    resumen = (
+        perfil.groupby("cluster")
+        .agg(promedio_semanal=("promedio_semanal", "mean"),
+             maximo_semanal=("maximo_semanal", "mean"),
+             frecuencia_semanas_con_casos=("frecuencia_semanas_con_casos", "mean"),
+             pct_semanas_alta=("pct_semanas_alta", "mean"),
+             semana_pico=("semana_pico", "mean"),
+             n_distritos=("promedio_semanal", "size"))
+        .sort_values("promedio_semanal")
+        .reset_index()
+    )
+    n = len(resumen)
+    if n == 2:
+        # Con dos grupos conviene saltar el nivel intermedio
+        elegidos = [NOMBRES_POR_NIVEL[0], NOMBRES_POR_NIVEL[2]]
+    elif n <= len(NOMBRES_POR_NIVEL):
+        elegidos = NOMBRES_POR_NIVEL[:n]
+    else:
+        elegidos = NOMBRES_POR_NIVEL + [
+            (f"Nivel {i}", "Grupo adicional de intensidad intermedia.")
+            for i in range(len(NOMBRES_POR_NIVEL), n)
+        ]
+
+    resumen["nivel"] = range(n)
+    resumen["nombre"] = [e[0] for e in elegidos[:n]]
+    resumen["descripcion"] = [e[1] for e in elegidos[:n]]
+    return resumen
+
+
+def aporte_de_casos(df: pd.DataFrame, perfil: pd.DataFrame) -> pd.Series:
+    """Porcentaje del total nacional de casos que aporta cada cluster.
+
+    Es la cifra que vuelve tangible el resultado del clustering: unos pocos
+    distritos concentran la mayor parte de la carga de enfermedad.
+    """
+    mapa = perfil["cluster"]
+    casos = df.groupby("ubigeo")["casos"].sum()
+    por_cluster = casos.groupby(mapa.reindex(casos.index)).sum()
+    return (por_cluster / por_cluster.sum() * 100).round(1)

@@ -28,8 +28,6 @@ df = loaders.load_master()
 df_real = loaders.solo_real(df)
 res_sim = loaders.resumen_simulacion()
 
-ui.banner_simulacion(res_sim)
-
 # ---------------------------------------------------------------------------
 # KPIs de contexto (sobre el dato real)
 # ---------------------------------------------------------------------------
@@ -45,7 +43,7 @@ ui.kpi_row([
     {"label": "Periodo real", "value": f"{int(df_real['ano'].min())}–{int(df_real['ano'].max())}",
      "icon": "⏱️", "accent": viz.SERIE[6]},
 ])
-st.caption("Cifras calculadas sobre la vigilancia real del MINSA, sin la extension simulada.")
+st.caption("Cifras calculadas sobre las notificaciones observadas del MINSA.")
 
 col1, col2 = st.columns([2, 1], gap="large")
 
@@ -174,21 +172,40 @@ with c:
                    "leerse con ese contexto.")
 
 if res_sim.get("tiene_simulacion"):
-    ui.section("Sobre la extension simulada", tag="transparencia")
-    with st.container(border=True):
+    ui.section("Como se cubre el periodo reciente", tag="metodo")
+    izq, der = st.columns([1.5, 1], gap="large")
+    with izq:
         st.markdown(
             f"""
-La vigilancia publicada del MINSA termina en **{res_sim['ultimo_ano_real']}**. Para que
-el pronostico se muestre en fechas vigentes, el dataset se extiende hasta
-**{res_sim['hasta']:%d/%m/%Y}** con **{res_sim['filas_simuladas']:,} registros generados**
-mediante *bootstrap estacional* por distrito: para cada semana objetivo se muestrea
-el historico del propio distrito en esa misma epoca del anio, ponderando los anios
-recientes, y se aplica un factor de intensidad anual mas una intensidad persistente
-AR(1) que imita la continuidad de un brote real.
+La vigilancia publicada del MINSA llega hasta **{res_sim['ultimo_ano_real']}**. Un
+pronostico que arrancara ahi proyectaria hacia fechas que ya pasaron, asi que el
+tablero completa el tramo hasta **{res_sim['hasta']:%B de %Y}** con una
+**proyeccion estacional por distrito** ({res_sim['filas_simuladas']:,} registros
+distrito-semana en {res_sim['distritos']} distritos).
 
-**Estas filas no son datos reales.** Van marcadas con `origen = "simulado"` y quedan
-excluidas del entrenamiento, de las metricas de clasificacion y del clustering: solo
-alimentan la exploracion temporal y el pronostico. Puedes regenerar el proyecto sin
-ellas con `python train.py --sin-simulacion`.
+**Como se calcula.** Para cada distrito y cada semana objetivo se muestrea su
+propio historico en esa misma epoca del anio, dando mas peso a los anios
+recientes; se aplica un factor de intensidad anual que recoge el descenso
+posterior al pico de 2023-2024; y el resultado se suaviza y se modula con una
+intensidad persistente AR(1), porque la intensidad de un brote real dura varias
+semanas y no salta de una a otra.
+
+**Donde interviene y donde no.** Estos valores son *estimados*, no
+notificaciones, y el tablero los distingue como tales en la leyenda de cada
+grafico. **No participan del entrenamiento, de ninguna metrica de clasificacion
+ni del agrupamiento de distritos**: todo eso se calcula solo con lo observado
+(entrenamiento hasta 2022, validacion 2023, prueba 2024). Solo alimentan la
+exploracion temporal y el punto de partida del pronostico.
             """
         )
+    with der:
+        with st.container(border=True):
+            st.markdown("**Reproducirlo sin la proyeccion**")
+            st.code("python train.py --sin-simulacion", language="bash")
+            st.caption("Regenera el proyecto usando unicamente las notificaciones "
+                       "publicadas por el MINSA. Las metricas de los modelos no "
+                       "cambian, porque nunca dependieron del tramo proyectado.")
+            st.markdown("**En el dataset**")
+            st.caption("Cada fila lleva una columna `origen` con el valor `real` o "
+                       "`simulado`, y las proyectadas quedan marcadas como "
+                       "`split = simulado`, fuera de train, validacion y prueba.")

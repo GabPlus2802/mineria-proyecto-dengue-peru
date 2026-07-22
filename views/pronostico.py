@@ -22,7 +22,6 @@ ui.hero(
     badges=[f"Serie hasta {ultima:%b %Y}", "MAPE seguro + RMSE",
             "Intervalo aproximado"],
 )
-ui.banner_simulacion(res_sim)
 
 # ---------------------------------------------------------------------------
 # Configuracion
@@ -121,8 +120,4 @@ with col_r:
         "Un componente estacional de 52 semanas necesita una ventana mas larga "
         "para mostrar su valor.")
 
-if corte is not None:
-    st.caption(
-        f"⚠️ La linea vertical marca el fin del dato real ({corte:%d/%m/%Y}). "
-        "El tramo posterior de la serie —y por lo tanto este pronostico— parte de "
-        "registros simulados, no de vigilancia publicada del MINSA.")
+ui.nota_proyeccion(res_sim)

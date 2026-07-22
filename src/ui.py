@@ -1,8 +1,9 @@
-"""Componentes y estilos de interfaz — "sala de vigilancia epidemiologica".
+"""Componentes y estilos de interfaz — tema claro.
 
-Superficie oscura azulada, acento cian de marca, etiquetas monoespaciadas y
-tarjetas con mucho aire. El acento cian es SOLO cromo de interfaz: los colores
-de datos viven en src/visualizations.py y estan validados para daltonismo.
+Superficies blancas sobre gris muy claro, acento turquesa de marca, etiquetas
+monoespaciadas y tarjetas con mucho aire. El acento turquesa es SOLO cromo de
+interfaz: los colores de datos viven en src/visualizations.py y estan validados
+para daltonismo.
 """
 
 from __future__ import annotations
@@ -25,45 +26,49 @@ _MONO = 'ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace'
 _CSS = f"""
 <style>
 :root {{
-  --plano:{viz.PLANO}; --card:{viz.SUPERFICIE}; --card-2:#131e33;
+  --plano:{viz.PLANO}; --card:{viz.SUPERFICIE}; --card-2:#fbfcfe;
   --ink:{viz.TINTA}; --ink-2:{viz.TINTA_2}; --muted:{viz.MUTED};
-  --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
-  --acento:{ACENTO}; --acento-d:#0e7490;
+  --line:#e6ebf1; --line-2:#d3dce6;
+  --acento:{ACENTO}; --acento-d:#0f766e;
   --bueno:{BUENO}; --aviso:{AVISO}; --critico:{CRITICO};
   --radius:14px;
-  --shadow:0 1px 2px rgba(0,0,0,0.4), 0 12px 34px rgba(0,0,0,0.34);
+  --shadow:0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06);
   --mono:{_MONO};
 }}
 
-/* --- Plano de pagina: dos halos y una retícula muy tenue --- */
+/* --- Plano de pagina: dos halos muy suaves sobre gris claro --- */
 .stApp, [data-testid="stAppViewContainer"] {{
   background:
-    radial-gradient(1000px 520px at 92% -10%, rgba(34,211,238,0.10), transparent 62%),
-    radial-gradient(760px 460px at -8% 2%, rgba(57,135,229,0.10), transparent 60%),
-    linear-gradient(rgba(255,255,255,0.014) 1px, transparent 1px) 0 0/100% 34px,
+    radial-gradient(940px 500px at 96% -8%, rgba(13,148,136,0.07), transparent 62%),
+    radial-gradient(720px 440px at -6% 3%, rgba(42,120,214,0.06), transparent 60%),
     var(--plano);
   color:var(--ink);
 }}
-.block-container {{ padding-top:1.2rem; padding-bottom:3.2rem; max-width:1460px;
-  animation:fadeIn .42s ease; }}
+
+/* --- Cabecera fija: fondo propio para que el contenido no quede debajo --- */
+[data-testid="stHeader"] {{
+  background:rgba(245,247,250,0.90); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}}
+/* Espacio real bajo la barra de navegacion superior */
+.block-container {{ padding-top:3.8rem !important; padding-bottom:3.4rem;
+  max-width:1460px; animation:fadeIn .42s ease; }}
 @keyframes fadeIn {{ from{{opacity:0; transform:translateY(7px);}} to{{opacity:1; transform:none;}} }}
 
 h1,h2,h3,h4 {{ letter-spacing:-0.015em; color:var(--ink); }}
-a {{ color:var(--acento) !important; }}
+a {{ color:var(--acento-d) !important; }}
 hr, [data-testid="stDivider"] {{ border-color:var(--line) !important; }}
-code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
+code {{ background:rgba(13,148,136,0.09); color:var(--acento-d); border-radius:5px;
   padding:1px 5px; }}
 
 /* --- Navegacion superior --- */
-[data-testid="stNavigationMenu"] {{ border-bottom:1px solid var(--line);
-  padding-bottom:2px; }}
+[data-testid="stNavigationMenu"] {{ padding:2px 0; }}
 [data-testid="stNavigationMenu"] a, header [role="tablist"] a {{
-  border-radius:9px 9px 0 0; font-weight:650; color:var(--ink-2); }}
-[data-testid="stNavigationMenu"] a:hover {{ background:rgba(34,211,238,0.09);
+  border-radius:9px; font-weight:650; color:var(--ink-2); }}
+[data-testid="stNavigationMenu"] a:hover {{ background:rgba(13,148,136,0.09);
   color:var(--ink); }}
 [data-testid="stNavigationMenu"] a[aria-current="page"] {{
-  color:var(--acento) !important;
-  background:linear-gradient(180deg, rgba(34,211,238,0.14), rgba(34,211,238,0.02));
+  color:var(--acento-d) !important; background:rgba(13,148,136,0.12);
   box-shadow:inset 0 -2px 0 var(--acento); }}
 
 /* --- Tarjetas: metricas, graficos, tablas, contenedores --- */
@@ -84,31 +89,30 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
   font-weight:700; }}
 
 /* --- Barra lateral --- */
-[data-testid="stSidebar"] {{ background:linear-gradient(180deg, #0c1526, #0a1120);
-  border-right:1px solid var(--line); }}
-[data-testid="stSidebar"] .block-container {{ padding-top:1rem; }}
+[data-testid="stSidebar"] {{ background:#ffffff; border-right:1px solid var(--line); }}
+[data-testid="stSidebar"] .block-container {{ padding-top:1.2rem !important; }}
 [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{ font-size:0.98rem; }}
 
-/* --- Cabecera (hero) --- */
+/* --- Cabecera de panel (hero) --- */
 .hero {{ position:relative; overflow:hidden;
-  background:linear-gradient(135deg, #12203a 0%, var(--card) 52%);
-  border:1px solid var(--line); border-radius:16px; padding:21px 26px;
-  margin-bottom:18px; box-shadow:var(--shadow); }}
+  background:linear-gradient(135deg, #f0fdfa 0%, var(--card) 55%);
+  border:1px solid var(--line); border-radius:16px; padding:22px 26px;
+  margin:2px 0 18px; box-shadow:var(--shadow); }}
 .hero::before {{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
   background:linear-gradient(180deg, var(--acento), {viz.SERIE[0]}); }}
 .hero::after {{ content:""; position:absolute; right:-50px; top:-70px;
   width:270px; height:270px;
-  background:radial-gradient(circle, rgba(34,211,238,0.16), transparent 70%);
+  background:radial-gradient(circle, rgba(13,148,136,0.12), transparent 70%);
   pointer-events:none; }}
-.hero .h-title {{ font-size:1.56rem; font-weight:800; line-height:1.14;
+.hero .h-title {{ font-size:1.58rem; font-weight:800; line-height:1.22;
   color:var(--ink); position:relative; }}
-.hero .h-sub {{ font-size:0.95rem; color:var(--ink-2); margin-top:5px;
-  position:relative; max-width:74ch; }}
+.hero .h-sub {{ font-size:0.95rem; color:var(--ink-2); margin-top:6px;
+  position:relative; max-width:76ch; line-height:1.5; }}
 .hero .h-badges {{ margin-top:14px; display:flex; flex-wrap:wrap; gap:8px;
   position:relative; }}
 .hero .badge {{ font-family:var(--mono); text-transform:uppercase;
-  letter-spacing:0.07em; font-size:0.67rem; font-weight:600; color:#67e8f9;
-  background:rgba(34,211,238,0.10); border:1px solid rgba(34,211,238,0.28);
+  letter-spacing:0.07em; font-size:0.67rem; font-weight:600; color:var(--acento-d);
+  background:rgba(13,148,136,0.09); border:1px solid rgba(13,148,136,0.26);
   padding:4px 10px; border-radius:7px; }}
 
 /* --- Chips de estadistica --- */
@@ -128,7 +132,7 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
 .section-h .tag {{ margin-left:auto; font-family:var(--mono); text-transform:uppercase;
   letter-spacing:0.08em; font-size:0.63rem; color:var(--muted); font-weight:600; }}
 .section-desc {{ color:var(--ink-2); font-size:0.88rem; margin:0 0 10px 14px;
-  max-width:96ch; }}
+  max-width:96ch; line-height:1.55; }}
 
 /* --- Tira de KPIs --- */
 .kpi-strip {{ display:flex; gap:12px; flex-wrap:wrap; margin:6px 0 4px; }}
@@ -139,11 +143,11 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
 .kpi::before {{ content:""; position:absolute; top:0; left:0; right:0; height:3px;
   background:linear-gradient(90deg, var(--accent,var(--acento)), transparent 88%); }}
 .kpi:hover {{ transform:translateY(-2px); border-color:var(--line-2);
-  box-shadow:0 14px 36px rgba(0,0,0,0.5); }}
+  box-shadow:0 12px 30px rgba(15,23,42,0.10); }}
 .kpi .ico {{ width:40px; height:40px; flex:0 0 40px; border-radius:11px;
   display:flex; align-items:center; justify-content:center; font-size:1.18rem;
-  background:color-mix(in srgb, var(--accent,var(--acento)) 18%, transparent);
-  border:1px solid color-mix(in srgb, var(--accent,var(--acento)) 34%, transparent); }}
+  background:color-mix(in srgb, var(--accent,var(--acento)) 12%, white);
+  border:1px solid color-mix(in srgb, var(--accent,var(--acento)) 26%, transparent); }}
 .kpi .lbl {{ color:var(--muted); font-family:var(--mono); font-size:0.63rem;
   text-transform:uppercase; letter-spacing:0.08em; font-weight:600; }}
 .kpi .val {{ color:var(--ink); font-size:1.33rem; font-weight:800;
@@ -151,24 +155,34 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
 .kpi .sub {{ color:var(--ink-2); font-size:0.72rem; }}
 
 /* --- Callout --- */
-.callout {{ background:rgba(250,178,25,0.09); border:1px solid rgba(250,178,25,0.3);
-  border-left:4px solid var(--aviso); border-radius:10px; padding:12px 15px;
-  color:var(--ink); font-size:0.91rem; }}
+.callout {{ background:rgba(13,148,136,0.07); border:1px solid rgba(13,148,136,0.24);
+  border-left:4px solid var(--acento); border-radius:10px; padding:12px 15px;
+  color:var(--ink); font-size:0.91rem; line-height:1.55; }}
 
-/* --- Aviso de datos simulados --- */
-.sim-banner {{ display:flex; align-items:flex-start; gap:12px;
-  background:linear-gradient(90deg, rgba(250,178,25,0.13), rgba(250,178,25,0.03));
-  border:1px solid rgba(250,178,25,0.34); border-left:4px solid var(--aviso);
-  border-radius:11px; padding:12px 16px; margin:6px 0 14px; }}
-.sim-banner .ico {{ font-size:1.15rem; line-height:1.3; }}
-.sim-banner .t {{ font-family:var(--mono); text-transform:uppercase;
-  letter-spacing:0.08em; font-size:0.64rem; font-weight:700; color:var(--aviso); }}
-.sim-banner .d {{ color:var(--ink-2); font-size:0.87rem; margin-top:3px; }}
+/* --- Nota de metodo: discreta, al pie de una seccion --- */
+.nota {{ display:flex; align-items:flex-start; gap:9px; color:var(--muted);
+  font-size:0.79rem; line-height:1.5; margin:8px 0 2px; }}
+.nota .ico {{ opacity:0.8; }}
+
+/* --- Tarjeta de cluster --- */
+.cluster {{ position:relative; overflow:hidden; background:var(--card);
+  border:1px solid var(--line); border-left:5px solid var(--accent,var(--acento));
+  border-radius:12px; padding:15px 17px; box-shadow:var(--shadow); height:100%; }}
+.cluster .nom {{ font-size:1.02rem; font-weight:750; color:var(--ink); }}
+.cluster .n {{ font-family:var(--mono); font-size:0.62rem; text-transform:uppercase;
+  letter-spacing:0.08em; color:var(--muted); font-weight:600; margin-top:3px; }}
+.cluster .d {{ color:var(--ink-2); font-size:0.86rem; margin-top:9px; line-height:1.5; }}
+.cluster .cifras {{ display:flex; gap:16px; flex-wrap:wrap; margin-top:11px;
+  padding-top:11px; border-top:1px solid var(--line); }}
+.cluster .cifra .k {{ font-family:var(--mono); font-size:0.57rem; text-transform:uppercase;
+  letter-spacing:0.07em; color:var(--muted); font-weight:600; }}
+.cluster .cifra .v {{ font-size:0.95rem; font-weight:700; color:var(--ink);
+  font-variant-numeric:tabular-nums; }}
 
 /* --- Pestanas --- */
 [data-baseweb="tab-list"] {{ gap:6px; border-bottom:1px solid var(--line); }}
 [data-baseweb="tab"] {{ font-weight:650; color:var(--ink-2); }}
-[data-baseweb="tab"][aria-selected="true"] {{ color:var(--acento); }}
+[data-baseweb="tab"][aria-selected="true"] {{ color:var(--acento-d); }}
 [data-baseweb="tab-highlight"] {{ background:var(--acento) !important; height:3px; }}
 
 /* --- Botones --- */
@@ -176,11 +190,11 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
   font-weight:650; border-color:var(--line-2); }}
 .stButton button[kind="primary"], [data-testid="stFormSubmitButton"] button[kind="primary"] {{
   background:linear-gradient(120deg, var(--acento), {viz.SERIE[0]}); border:none;
-  color:#05121c; box-shadow:0 6px 18px rgba(34,211,238,0.26); }}
+  color:#ffffff; box-shadow:0 5px 16px rgba(13,148,136,0.26); }}
 
 /* --- Sliders: el control principal del panel de prediccion --- */
 [data-testid="stSlider"] [data-baseweb="slider"] div[role="slider"] {{
-  box-shadow:0 0 0 3px rgba(34,211,238,0.22); }}
+  box-shadow:0 0 0 3px rgba(13,148,136,0.20); }}
 [data-testid="stSlider"] label, [data-testid="stNumberInput"] label,
 [data-testid="stSelectbox"] label {{ font-weight:600; color:var(--ink-2); }}
 
@@ -194,9 +208,9 @@ code {{ background:rgba(34,211,238,0.10); color:#7dd3fc; border-radius:5px;
 /* --- Scroll --- */
 ::-webkit-scrollbar {{ width:11px; height:11px; }}
 ::-webkit-scrollbar-track {{ background:var(--plano); }}
-::-webkit-scrollbar-thumb {{ background:#243248; border-radius:8px;
+::-webkit-scrollbar-thumb {{ background:#cbd5e1; border-radius:8px;
   border:2px solid var(--plano); }}
-::-webkit-scrollbar-thumb:hover {{ background:#33455f; }}
+::-webkit-scrollbar-thumb:hover {{ background:#94a3b8; }}
 </style>
 """
 
@@ -246,8 +260,14 @@ def section(title: str, desc: str = "", tag: str = ""):
 
 
 def callout(html: str):
-    """Bloque de recomendacion con acento ambar."""
+    """Bloque de recomendacion con acento de marca."""
     st.markdown(f'<div class="callout">{html}</div>', unsafe_allow_html=True)
+
+
+def nota(html: str, icono: str = "ⓘ"):
+    """Nota de metodo discreta, al pie de una seccion."""
+    st.markdown(f'<div class="nota"><span class="ico">{icono}</span>'
+                f'<span>{html}</span></div>', unsafe_allow_html=True)
 
 
 def kpi_row(items: list[dict]):
@@ -265,24 +285,39 @@ def kpi_row(items: list[dict]):
     st.markdown(f'<div class="kpi-strip">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
-def banner_simulacion(res: dict, detalle: str = ""):
-    """Aviso permanente de que parte del periodo mostrado NO es dato real.
+def tarjeta_cluster(nombre: str, n_distritos: int, descripcion: str,
+                    cifras: list[dict], accent: str = ACENTO):
+    """Tarjeta que explica un cluster en lenguaje llano.
 
-    'res' es lo que devuelve src.simulation.resumen(). Si no hay extension
-    simulada no dibuja nada.
+    cifras: lista de {label, value} con los rasgos que definen al grupo.
+    """
+    datos = "".join(
+        f'<div class="cifra"><div class="k">{c["label"]}</div>'
+        f'<div class="v">{c["value"]}</div></div>' for c in cifras
+    )
+    st.markdown(
+        f'<div class="cluster" style="--accent:{accent}">'
+        f'<div class="nom">{nombre}</div>'
+        f'<div class="n">{n_distritos} distritos</div>'
+        f'<div class="d">{descripcion}</div>'
+        f'<div class="cifras">{datos}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def nota_proyeccion(res: dict):
+    """Nota discreta sobre el tramo proyectado de la serie.
+
+    'res' es lo que devuelve src.simulation.resumen(). La distincion entre dato
+    observado y proyectado va sobre todo en la leyenda de los graficos; esto es
+    el pie de pagina que la explica.
     """
     if not res.get("tiene_simulacion"):
         return
-    texto = detalle or (
-        f"Los registros desde <b>{res['desde']:%d/%m/%Y}</b> hasta "
-        f"<b>{res['hasta']:%d/%m/%Y}</b> ({res['filas_simuladas']:,} filas de "
-        f"{res['distritos']} distritos) fueron <b>generados por simulacion "
-        f"estacional</b>, no son notificaciones del MINSA. La vigilancia real "
-        f"publicada termina en {res['ultimo_ano_real']}."
-    )
-    st.markdown(
-        f'<div class="sim-banner"><div class="ico">⚠️</div><div>'
-        f'<div class="t">Datos simulados en el periodo reciente</div>'
-        f'<div class="d">{texto}</div></div></div>',
-        unsafe_allow_html=True,
+    nota(
+        f"Las notificaciones del MINSA llegan hasta {res['ultimo_ano_real']}. "
+        f"El tramo desde {res['desde']:%m/%Y} hasta {res['hasta']:%m/%Y} es una "
+        f"<b>proyeccion estacional</b> calculada a partir del historico de cada "
+        f"distrito, y aparece diferenciado en los graficos. No interviene en el "
+        f"entrenamiento ni en las metricas de los modelos."
     )

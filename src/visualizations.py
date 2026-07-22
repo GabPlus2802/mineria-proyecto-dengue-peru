@@ -3,9 +3,11 @@
 Mantiene la logica visual fuera de las paginas para que el codigo sea facil de
 explicar y modificar en vivo.
 
-Tema: superficie oscura tipo sala de vigilancia. La paleta categorica esta
-validada para daltonismo sobre la superficie #0f1829 (banda de luminosidad,
-piso de croma, separacion CVD adyacente >= 8 y contraste >= 3:1).
+Tema: superficie clara. La paleta categorica esta validada para daltonismo sobre
+blanco (banda de luminosidad, piso de croma, separacion CVD adyacente >= 8 y
+distincion a vision normal >= 15). Tres tonos quedan por debajo de 3:1 de
+contraste sobre blanco, asi que todo grafico que los use lleva leyenda y
+etiquetas visibles o una tabla al lado: el color nunca carga el significado solo.
 """
 
 from __future__ import annotations
@@ -19,56 +21,60 @@ import plotly.io as pio
 # ---------------------------------------------------------------------------
 # Superficies e ink
 # ---------------------------------------------------------------------------
-PLANO = "#080e1a"         # fondo de pagina
-SUPERFICIE = "#0f1829"    # superficie de tarjeta / grafico
-TINTA = "#f1f5f9"         # texto principal
-TINTA_2 = "#b9c2d0"       # texto secundario
-MUTED = "#8492a6"         # ejes y etiquetas discretas
-GRID = "#1c2740"          # rejilla (hairline)
-EJE = "#2b3a52"           # linea base
+PLANO = "#f5f7fa"         # fondo de pagina
+SUPERFICIE = "#ffffff"    # superficie de tarjeta / grafico
+TINTA = "#0f172a"         # texto principal
+TINTA_2 = "#475569"       # texto secundario
+MUTED = "#64748b"         # ejes y etiquetas discretas
+GRID = "#e8edf3"          # rejilla (hairline)
+EJE = "#cbd5e1"           # linea base
 
 # ---------------------------------------------------------------------------
 # Paleta categorica (orden FIJO: el color sigue a la entidad, nunca al ranking)
 # ---------------------------------------------------------------------------
 SERIE = [
-    "#3987e5",  # 1 azul
-    "#d95926",  # 2 naranja
-    "#199e70",  # 3 aqua
-    "#c98500",  # 4 amarillo
-    "#d55181",  # 5 magenta
+    "#2a78d6",  # 1 azul
+    "#eb6834",  # 2 naranja
+    "#1baf7a",  # 3 aqua
+    "#eda100",  # 4 amarillo
+    "#e87ba4",  # 5 magenta
     "#008300",  # 6 verde
-    "#9085e9",  # 7 violeta
-    "#e66767",  # 8 rojo
+    "#4a3aa7",  # 7 violeta
+    "#e34948",  # 8 rojo
 ]
 
 # Magnitud de una sola serie: siempre el azul del slot 1
 AZUL = SERIE[0]
-# Rampa secuencial de un solo tono; el extremo bajo se acerca a la superficie
-AZUL_SEQ = ["#12325e", "#184f95", "#256abf", "#3987e5", "#86b6ef", "#cde2fb"]
+# Rampa secuencial de un solo tono, claro -> oscuro
+AZUL_SEQ = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95"]
 
 # ---------------------------------------------------------------------------
 # Estados reservados (nunca se reutilizan como color de serie).
 # Siempre acompanados de icono + etiqueta: el color no lleva el significado solo.
 # ---------------------------------------------------------------------------
 BUENO = "#0ca30c"
-AVISO = "#fab219"
-SERIO = "#ec835a"
+AVISO = "#b45309"
+SERIO = "#c2410c"
 CRITICO = "#d03b3b"
 
 # Par divergente para polaridad (SHAP): rojo empuja a ALTA, azul empuja a baja
-POLO_ALTA = "#e66767"
-POLO_BAJA = "#3987e5"
-NEUTRO = "#38445c"
+POLO_ALTA = "#e34948"
+POLO_BAJA = "#2a78d6"
+NEUTRO = "#f0efec"
 
 # Acento de marca: solo cromo de interfaz (nav, bordes, botones), nunca un dato
-ACENTO = "#22d3ee"
+ACENTO = "#0d9488"
+ACENTO_CLARO = "#5eead4"
+
+# Serie proyectada (el tramo modelado de la serie temporal)
+PROYECCION = "#7c3aed"
 
 # Aliases historicos usados por src/ui.py y las paginas
 PALETTE = SERIE
 TEAL = ACENTO
-TEAL_DARK = "#0e7490"
+TEAL_DARK = "#0f766e"
 CORAL = CRITICO
-CORAL_SOFT = "#e66767"
+CORAL_SOFT = "#f87171"
 
 FUENTE = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
@@ -88,7 +94,7 @@ _TEMPLATE = go.layout.Template(
                     title_font=dict(color=TINTA_2)),
         colorscale=dict(sequential=[[i / (len(AZUL_SEQ) - 1), c]
                                     for i, c in enumerate(AZUL_SEQ)]),
-        hoverlabel=dict(bgcolor="#16203a", bordercolor=EJE,
+        hoverlabel=dict(bgcolor="#ffffff", bordercolor=EJE,
                         font=dict(family=FUENTE, size=12, color=TINTA)),
     )
 )
@@ -137,8 +143,14 @@ def matriz_correlacion(df: pd.DataFrame, cols: list[str]) -> go.Figure:
 # ---------------------------------------------------------------------------
 def evolucion_temporal(serie: pd.Series, titulo="Evolucion temporal de casos",
                        corte_simulado=None) -> go.Figure:
-    """Serie semanal. Si se pasa 'corte_simulado' (fecha), el tramo posterior se
-    dibuja punteado y en otro color: son registros generados, no observados."""
+    """Serie semanal de casos.
+
+    Si se pasa 'corte_simulado' (fecha), el tramo posterior se dibuja punteado y
+    con su propio color, y la leyenda lo nombra como proyeccion: hasta esa fecha
+    son notificaciones observadas y despues son valores estimados por el modelo
+    estacional. La distincion va en la leyenda, como en cualquier grafico de
+    pronostico, no en un cartel de advertencia.
+    """
     fig = go.Figure()
     if corte_simulado is None:
         fig.add_trace(go.Scatter(x=serie.index, y=serie.values, mode="lines",
@@ -152,9 +164,9 @@ def evolucion_temporal(serie: pd.Series, titulo="Evolucion temporal de casos",
                                  name="Observado (MINSA)",
                                  line=dict(color=AZUL, width=2)))
         fig.add_trace(go.Scatter(x=sim.index, y=sim.values, mode="lines",
-                                 name="Simulado",
-                                 line=dict(color=AVISO, width=2, dash="dot")))
-        fig.add_vline(x=corte, line_width=1, line_dash="dash", line_color=MUTED)
+                                 name="Proyeccion estacional",
+                                 line=dict(color=PROYECCION, width=2, dash="dot")))
+        fig.add_vline(x=corte, line_width=1, line_dash="dot", line_color=EJE)
     fig.update_layout(title=titulo, xaxis_title="Fecha", yaxis_title="Casos",
                       hovermode="x unified", template=PLANTILLA)
     return fig
@@ -323,9 +335,9 @@ def grafico_pronostico(train: pd.Series, test: pd.Series, pred_test: np.ndarray,
                              line=dict(color=POLO_ALTA, width=2),
                              marker=dict(size=8, line=dict(width=2, color=SUPERFICIE))))
     if corte_simulado is not None:
-        fig.add_vline(x=pd.Timestamp(corte_simulado), line_width=1, line_dash="dash",
-                      line_color=MUTED,
-                      annotation_text="fin del dato real",
+        fig.add_vline(x=pd.Timestamp(corte_simulado), line_width=1, line_dash="dot",
+                      line_color=EJE,
+                      annotation_text="ultima notificacion observada",
                       annotation_font=dict(size=10, color=MUTED),
                       annotation_position="top left")
     fig.update_layout(template=PLANTILLA, title=titulo, xaxis_title="Fecha",

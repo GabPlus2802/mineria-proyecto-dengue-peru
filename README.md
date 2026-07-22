@@ -54,11 +54,15 @@ por distrito** ([`src/simulation.py`](src/simulation.py)):
    **intensidad persistente AR(1)** (ρ = 0.75): la intensidad de un brote real
    persiste varias semanas, un ruido independiente por semana no lo representa.
 
-> ⚠️ **Estas filas NO son datos reales.** Llevan `origen = "simulado"` y
-> `split = "simulado"`, por lo que quedan **excluidas del entrenamiento, de todas
-> las métricas de clasificación y del clustering**. Solo alimentan la exploración
-> temporal y el pronóstico. El dashboard lo advierte de forma permanente en cada
-> panel afectado.
+> ⚠️ **Estas filas NO son notificaciones reales**, son valores estimados. Llevan
+> `origen = "simulado"` y `split = "simulado"`, por lo que quedan **excluidas del
+> entrenamiento, de todas las métricas de clasificación y del clustering**. Solo
+> alimentan la exploración temporal y el punto de partida del pronóstico.
+>
+> En el dashboard la distinción va donde corresponde en un gráfico de pronóstico:
+> **en la leyenda** — *"Observado (MINSA)"* frente a *"Proyección estacional"*,
+> con el tramo estimado punteado y en otro color, y una nota de método al pie. El
+> método completo se explica en la sección *Acerca de*.
 >
 > Para reconstruir el proyecto **solo con datos reales**: `python train.py --sin-simulacion`.
 
@@ -106,9 +110,11 @@ semana, diagnostic, diresa, ubigeo, localcod, edad, tipo_edad, sexo`.
 - **Acerca de:** presentación del proyecto, fuente de datos, definición del
   objetivo, estado de los modelos, equipo y advertencias metodológicas.
 - **EDA y Clustering:** estadísticas, histogramas, boxplots, correlación,
-  evolución temporal (con el tramo simulado diferenciado), casos por
-  departamento/distrito, outliers (1.5·IQR) y agrupamiento K-means
-  (codo + silueta + PCA 2D).
+  evolución temporal (con el tramo proyectado diferenciado en la leyenda), casos
+  por departamento/distrito y outliers (1.5·IQR). El agrupamiento K-means se
+  presenta **interpretado**: por qué se agrupa, cómo se construyen los grupos en
+  3 pasos, una tarjeta por perfil con nombre epidemiológico y sus cifras clave, y
+  cuánto aporta cada grupo al total de casos del país.
 - **Modelo Predictivo:** **simulador con sliders** — se mueve cada variable del
   modelo y la probabilidad de alta incidencia y su explicación SHAP se recalculan
   al instante. Además: comparación de los 5 modelos, matriz de confusión, barrido
@@ -121,11 +127,14 @@ semana, diagnostic, diresa, ubigeo, localcod, edad, tipo_edad, sexo`.
 
 ### Diseño
 
-Tema oscuro tipo *sala de vigilancia epidemiológica*. La paleta categórica de los
-gráficos está **validada para daltonismo** sobre la superficie oscura del tablero
-(banda de luminosidad, piso de croma, separación CVD ≥ 8 entre pares adyacentes y
-contraste ≥ 3:1). El acento cian es solo cromo de interfaz y nunca codifica un
-dato. Definiciones en [`src/visualizations.py`](src/visualizations.py) (datos) y
+Tema claro: superficies blancas sobre gris muy suave, acento turquesa de marca y
+tarjetas con aire. La paleta categórica de los gráficos está **validada para
+daltonismo** (banda de luminosidad, piso de croma, separación CVD ≥ 8 entre pares
+adyacentes y distinción a visión normal ≥ 15). Tres tonos quedan por debajo de
+3:1 de contraste sobre blanco, así que todo gráfico que los use lleva leyenda y
+etiquetas visibles o una tabla al lado: **el color nunca carga el significado
+solo**. El acento turquesa es cromo de interfaz y no codifica ningún dato.
+Definiciones en [`src/visualizations.py`](src/visualizations.py) (datos) y
 [`src/ui.py`](src/ui.py) (interfaz).
 
 ## 5. Estructura del proyecto
@@ -265,7 +274,17 @@ evaluación**, así que se publica la tabla completa en lugar de una sola cifra:
 > y permite mover la ventana en vivo.
 
 **Clustering:** k = 3, silueta ≈ 0.353, PCA 2D explica 68.8 % de la varianza.
-Grupos: 342 distritos de baja transmisión, 195 de media y 34 de alta.
+
+| Perfil | Distritos | Casos/semana | Pico histórico | Semanas activas | % casos del país |
+|---|---|---|---|---|---|
+| Transmisión esporádica | 342 | 0.5 | 32 | 9 % | 14.1 % |
+| Transmisión estacional | 195 | 3.4 | 96 | 34 % | 39.8 % |
+| Transmisión alta y sostenida | 34 | 16.0 | 663 | 50 % | 46.1 % |
+
+> El hallazgo accionable: **34 distritos (6 % del país) concentran el 46 % de
+> todos los casos notificados**. Ahí rinde más cada sol invertido en control del
+> vector; los grupos de menor intensidad necesitan vigilancia para detectar un
+> brote inusual, no inversión permanente.
 
 > Los valores exactos se regeneran con `python train.py` y quedan en
 > `data/processed/metricas_*.csv`. Deben coincidir con lo mostrado en el dashboard.

@@ -292,8 +292,8 @@ with tab_sim:
         "modelo": modelo_pred, "prediccion": "alta" if pred else "baja",
         "probabilidad": round(proba, 4),
     }
-    st.info("Este escenario queda disponible para registrarlo en **Datos (CRUD)**.",
-            icon="💾")
+    ui.nota("Este escenario queda disponible para registrarlo en <b>Datos (CRUD)</b>.",
+            icono="💾")
 
 
 # ===========================================================================

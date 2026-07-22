@@ -1,4 +1,4 @@
-"""Panel 4: CRUD persistente de consultas (Supabase o modo local SQLite)."""
+"""Registro de consultas: CRUD persistente (Supabase o base local)."""
 
 import pandas as pd
 import streamlit as st
@@ -18,10 +18,10 @@ def _get_db():
 
 db = _get_db()
 modo = getattr(db, "modo", "local")
-if modo == "supabase":
-    st.success("Conectado a **Supabase** (persistencia en la nube).", icon="✅")
-else:
-    st.info("Persistencia local activa (SQLite).", icon="💾")
+# Indicador discreto: el backend es un detalle de infraestructura, no un aviso.
+st.sidebar.caption(
+    "Almacenamiento: **Supabase**" if modo == "supabase"
+    else "Almacenamiento: **base local**")
 
 df = loaders.load_master() if loaders.artefactos_listos() else None
 
@@ -31,7 +31,7 @@ df = loaders.load_master() if loaders.artefactos_listos() else None
 ui.section("Crear consulta")
 prefill = st.session_state.get("ultima_prediccion", {})
 if prefill:
-    st.caption("Prellenado con el ultimo escenario simulado en **Modelo Predictivo**.")
+    st.caption("Prellenado con el ultimo escenario de **Modelo Predictivo**.")
 
 MODELOS = list(modeling.MODEL_LABELS)
 
